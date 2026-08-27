@@ -1,0 +1,84 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build -c release
+      # Secrets are not reliably visible to job-level env expressions,
+      # so probe them in a step and gate on its output.
+      - name: Detect signing secrets
+        id: signing
+        env:
+          CERT: ${{ secrets.MACOS_CERT_P12 }}
+          CERTPW: ${{ secrets.MACOS_CERT_PASSWORD }}
+          P8: ${{ secrets.APPSTORE_P8 }}
+          KID: ${{ secrets.APPSTORE_KEY_ID }}
+          ISS: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          if [ -n "$CERT" ] && [ -n "$P8" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Lengths only: catches empty secrets without exposing values.
+          echo "secret lengths: cert=${#CERT} certpw=${#CERTPW} p8=${#P8} keyid=${#KID} issuer=${#ISS}"
+      - name: Import signing certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          echo "$CERT_P12" | base64 -d > cert.p12
+          security create-keychain -p ci-build ci.keychain
+          security set-keychain-settings -lut 1800 ci.keychain
+          security unlock-keychain -p ci-build ci.keychain
+          security import cert.p12 -k ci.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci-build ci.keychain
+          security list-keychains -d user -s ci.keychain login.keychain
+          rm cert.p12
+      - name: Package disk image (unsigned)
+        if: steps.signing.outputs.enabled != 'true'
+        run: SIGN_ID= make dmg
+      - name: Package, notarize and staple
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPSTORE_P8: ${{ secrets.APPSTORE_P8 }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+        run: |
+          echo "$APPSTORE_P8" | base64 -d > authkey.p8
+          # Individual App Store Connect API keys have no Issuer ID and
+          # notarytool rejects --issuer for them; pass it only when set.
+          NOTARY="--key authkey.p8 --key-id $APPSTORE_KEY_ID"
+          if [ -n "$APPSTORE_ISSUER_ID" ]; then
+            NOTARY="$NOTARY --issuer $APPSTORE_ISSUER_ID"
+          fi
+          make release NOTARY_ARGS="$NOTARY"
+          rm authkey.p8
+      - name: Upload dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PowerMate-dmg
+          path: dist/PowerMate-*.dmg
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # PowerMate.dmg is a stable-named copy so the website can link
+        # releases/latest/download/PowerMate.dmg across versions.
+        run: |
+          cp dist/PowerMate-*.dmg dist/PowerMate.dmg
+          gh release create "$GITHUB_REF_NAME" dist/PowerMate-*.dmg dist/PowerMate.dmg \
+            --title "PowerMate ${GITHUB_REF_NAME#v}" --generate-notes
