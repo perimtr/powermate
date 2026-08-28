@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let updateChecker = UpdateChecker()
     private var updateTimer: Timer?
     private var updateCheckWasManual = false
+    private var settingsController: SettingsWindowController?
     private let releaseItem = NSMenuItem(
         title: "Release Knob While Display Sleeps",
         action: #selector(toggleReleaseOnDisplaySleep), keyEquivalent: "")
@@ -192,6 +193,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Bring persisted per-app gains back for apps that are running.
         if #available(macOS 14.4, *) {
             _ = appVolume
+            if defaults.bool(forKey: "debugOpenSettings") {
+                defaults.removeObject(forKey: "debugOpenSettings")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                    self?.showSettings()
+                    logger.info("debug: settings window opened")
+                }
+            }
             if let target = defaults.string(forKey: "debugAppVolumeTest") {
                 defaults.removeObject(forKey: "debugAppVolumeTest")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
@@ -292,6 +300,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         pauseItem.target = self
         menu.addItem(pauseItem)
+        let settingsItem = NSMenuItem(
+            title: "Settings…", action: #selector(showSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(.separator())
 
         for root in [rotateRoot, clickRoot, doubleClickRoot, longPressRoot, pressTurnRoot] {
@@ -841,6 +853,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleAutoUpdate() {
         defaults.set(!defaults.bool(forKey: Pref.autoUpdateCheck),
                      forKey: Pref.autoUpdateCheck)
+    }
+
+    // MARK: - Settings window
+
+    @objc private func showSettings() {
+        if settingsController == nil {
+            var actions = SettingsActions()
+            actions.ledChanged = { [weak self] in self?.refreshLED(now: true) }
+            actions.pulseTuningChanged = { [weak self] in self?.resendPulseMode() }
+            actions.pulseAsleepChanged = { [weak self] value in
+                self?.led?.setPulseAsleep(value)
+            }
+            actions.bindingsChanged = { [weak self] in
+                guard let self else { return }
+                self.refreshDoubleClickEnabled()
+                if self.needsAccessibility, !MediaKeys.trusted {
+                    self.accessibilityNeeded()
+                }
+            }
+            actions.checkForUpdates = { [weak self] in self?.checkForUpdates() }
+            actions.availableUpdate = { [weak self] in
+                self?.updateChecker.available?.version
+            }
+            actions.pinnedProfileID = { [weak self] in self?.pinnedProfileID }
+            actions.setPinnedProfileID = { [weak self] id in
+                self?.pinnedProfileID = id
+                self?.updateStatusLine()
+                self?.refreshLED(now: true)
+            }
+            settingsController = SettingsWindowController(actions: actions, store: store)
+        }
+        settingsController?.show()
     }
 
     private func handlePressedRotate(_ direction: Int) {

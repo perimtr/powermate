@@ -78,6 +78,15 @@ All sources in Sources/PowerMate/:
 - Profiles.swift: Profile struct and ProfileStore (UserDefaults-backed
   per-app profile dictionaries).
 - VolumeHUD.swift: floating volume bezel (NSPanel + NSVisualEffectView).
+- SettingsWindow.swift: the Settings window (menu: "Settings...", Cmd
+  comma). SwiftUI grouped forms hosted in an AppKit window; four tabs
+  (Knob, LED, Profiles, General) that read and write the same defaults
+  as the menus, with a SettingsActions struct of closures carrying the
+  side effects back to AppDelegate (LED refresh, pulse retune, gesture
+  re-wiring, pinning, update checks). The Profiles tab adds app
+  profiles via an open panel on /Applications instead of the
+  switch-to-the-app-first menu flow. The menus remain the quick
+  control surface; the window is the full editor.
 
 Support/: Info.plist (bundle metadata), AppIcon.icns, make_appicon.swift
 (regenerates the icon artwork), pmled.swift (standalone USB probe:
@@ -304,6 +313,9 @@ downstream surfaces that display small (the website lists products at
   io.perimtr.powermate debugReenumerateOnConnect -bool true`, relaunch
   the app, and the log shows connect, "debug: re-enumerating on
   connect", a disconnect, and a clean re-seize. The flag is one-shot.
+- Settings-window smoke test: `defaults write io.perimtr.powermate
+  debugOpenSettings -bool true`, relaunch, and the window opens two
+  seconds later ("debug: settings window opened" at info). One-shot.
 - Update-check test: `defaults write io.perimtr.powermate
   debugUpdateCheckVersion -string 0.9` and `defaults delete
   io.perimtr.powermate lastUpdateCheckAt`, relaunch, and the log shows
@@ -340,5 +352,5 @@ downstream surfaces that display small (the website lists products at
 
 ## Roadmap ideas (not commitments)
 
-A settings window if the menus outgrow themselves, and Bluetooth
-PowerMate support (a different device entirely; out of scope so far).
+Bluetooth PowerMate support (a different device entirely; out of scope
+so far).

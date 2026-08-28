@@ -170,6 +170,10 @@ Details and how to verify: [PRIVACY.md](PRIVACY.md).
 
 - **Pause PowerMate** - temporarily ignore the knob (until toggled back;
   not persisted across launches). The LED goes dark while paused.
+- **Settings…** - everything below in one native window: four tabs for
+  the knob bindings, the LED, per-app profiles (add apps straight from
+  an open panel), and general behavior. The menu and the window edit
+  the same settings; use whichever is closer at hand.
 - **Click / Double-Click / Long Press / Press & Turn** - remap each gesture.
   Actions include media keys, mute, Space, profile switching, cycling the
   default audio output device, and any Apple Shortcut. Setting Double-Click
