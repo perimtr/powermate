@@ -3,8 +3,8 @@
 How the PowerMate app handles your information: it doesn't.
 
 PowerMate runs entirely on your Mac. It has no server side, no accounts,
-and no network code of any kind. The app never phones home, never checks
-for updates, and never transmits anything.
+and no analytics. Its one network feature is the optional update check,
+described in full below; nothing else ever goes on the wire.
 
 ## Data We Do NOT Collect
 
@@ -14,6 +14,21 @@ for updates, and never transmits anything.
 - No location data
 - No device identifiers
 - No advertising trackers
+
+## The Update Check
+
+- The app can ask GitHub for the number of the newest release: a single
+  anonymous HTTPS request to api.github.com for public release
+  metadata, the same information anyone sees on the releases page
+- The request carries no identifiers, no account, and no payload. Like
+  any web request, GitHub's servers necessarily see the network address
+  it came from; nothing else about you or your Mac is included
+- Automatic checks run at most once a day while the app is running, and
+  only while "Check for Updates Automatically" is enabled in the menu;
+  turn it off and the manual "Check for Updates" item is the only
+  trigger
+- Nothing downloads or installs by itself. When a newer version exists,
+  the menu offers to open the release page in your browser
 
 ## What Stays on Your Mac
 
@@ -42,8 +57,10 @@ Nothing the app can see ever leaves your Mac.
 
 ## Verifying These Claims
 
-The complete source code is in this repository. The absence of network
-code can be checked directly: the app links no networking frameworks and
-contains no URL sessions, sockets, or analytics SDKs.
+The complete source code is in this repository. All of the app's network
+code is one small file, Sources/PowerMate/UpdateChecker.swift: a single
+HTTPS GET for release metadata. There are no other URL sessions, no
+sockets, and no analytics SDKs, which can be checked directly in the
+source.
 
 Questions: use the contact form at https://perimtr.io.

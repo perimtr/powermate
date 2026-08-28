@@ -158,8 +158,10 @@ and on again if that happens.
 
 ## Privacy
 
-PowerMate collects nothing and contains no network code. Details and how
-to verify: [PRIVACY.md](PRIVACY.md).
+PowerMate collects nothing. Its only network access is the optional
+update check: a single anonymous request to GitHub for the newest
+release number, at most once a day, with an off switch in the menu.
+Details and how to verify: [PRIVACY.md](PRIVACY.md).
 
 ## Menu options
 
@@ -200,6 +202,12 @@ to verify: [PRIVACY.md](PRIVACY.md).
   just before sleep.
 - **Start at Login** - registers a login item via `SMAppService`.
 - **About PowerMate** - version, license, and project link.
+- **Check for Updates** - asks GitHub for the newest release number and
+  offers to open the release page when something newer exists ("Get
+  PowerMate x.y"). Automatic checks run at most once a day and can be
+  turned off with **Check for Updates Automatically**; nothing downloads
+  by itself. What the request contains (and does not) is spelled out in
+  [PRIVACY.md](PRIVACY.md).
 
 ## How it works
 

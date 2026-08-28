@@ -69,6 +69,11 @@ All sources in Sources/PowerMate/:
 - SyntheticInput.swift: CGEvent scroll wheel and key press synthesis.
 - ShortcutRunner.swift: lists and runs Apple Shortcuts via the
   /usr/bin/shortcuts CLI, off the main thread, with run coalescing.
+- UpdateChecker.swift: the app's only network code. One anonymous HTTPS
+  GET to the GitHub releases API for the latest tag, compared against
+  CFBundleShortVersionString; automatic checks are daily, toggleable,
+  and never download anything. PRIVACY.md documents the request; keep
+  the two in sync.
 - KnobAction.swift: action and mode enums with raw-string serialization.
 - Profiles.swift: Profile struct and ProfileStore (UserDefaults-backed
   per-app profile dictionaries).
@@ -196,8 +201,9 @@ pressTurnMode, rotateShortcutCW, rotateShortcutCCW, pulseSpeed,
 pulseWaveform (raw strings), ledMode (0 follow volume / 1 always on /
 2 off),
 pulseWhenMuted, pulseWhileAsleep, showHUD, tickSound,
-releaseWhenDisplaySleeps, blockMusicAutoLaunch (Bools),
-didAutoRegisterLoginItem,
+releaseWhenDisplaySleeps, blockMusicAutoLaunch,
+checkForUpdatesAutomatically (Bools), lastUpdateCheckAt (Double epoch),
+lastNotifiedUpdate (String version), didAutoRegisterLoginItem,
 didDiscoverMenu (one-shot flags), appProfiles (dictionary).
 
 appProfiles: { bundleID: { name, rotate, click, doubleClick, longPress,
@@ -296,6 +302,12 @@ downstream surfaces that display small (the website lists products at
   io.perimtr.powermate debugReenumerateOnConnect -bool true`, relaunch
   the app, and the log shows connect, "debug: re-enumerating on
   connect", a disconnect, and a clean re-seize. The flag is one-shot.
+- Update-check test: `defaults write io.perimtr.powermate
+  debugUpdateCheckVersion -string 0.9` and `defaults delete
+  io.perimtr.powermate lastUpdateCheckAt`, relaunch, and the log shows
+  "update available: <latest> (running 0.9)" with the menu offering
+  "Get PowerMate <latest>". Delete the override afterwards; up-to-date
+  runs log "update check: up to date".
 - App-volume test without a knob: play something with a stable pid
   (afplay a long file), `defaults write io.perimtr.powermate
   debugAppVolumeTest -string "pid:<pid>"` (a bundle id also works),
@@ -312,7 +324,9 @@ downstream surfaces that display small (the website lists products at
   Use it for shared brand, color, typography, naming presentation, and
   Perimtr attribution decisions. PowerMate remains a hardware-led endorsed
   product and keeps its title-case name, native macOS UI, and fixed blue LED.
-- PRIVACY.md in this repo states the app collects nothing; keep it true.
+- PRIVACY.md in this repo states the app collects nothing and documents
+  its single network call (the update check, UpdateChecker.swift); keep
+  both statements true, and mirror changes to the perimtr.io page.
 - The company site (~/Projects/perimtr-website, deploys to perimtr.io on
   push via S3/CloudFront) has a PowerMate product card linking the
   GitHub repo (404 for the public while the repo is private) and a

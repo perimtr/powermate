@@ -27,6 +27,9 @@ enum Pref {
     static let pulseSpeed = "pulseSpeed"
     static let pulseWaveform = "pulseWaveform"
     static let blockMusicLaunch = "blockMusicAutoLaunch"
+    static let autoUpdateCheck = "checkForUpdatesAutomatically"
+    static let lastUpdateCheckAt = "lastUpdateCheckAt"
+    static let lastNotifiedUpdate = "lastNotifiedUpdate"
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -51,6 +54,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let musicGuardItem = NSMenuItem(
         title: "Stop Apple Music Auto-Launch",
         action: #selector(toggleMusicGuard), keyEquivalent: "")
+    private let updateCheckItem = NSMenuItem(
+        title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
+    private let autoUpdateItem = NSMenuItem(
+        title: "Check for Updates Automatically",
+        action: #selector(toggleAutoUpdate), keyEquivalent: "")
+    private let updateChecker = UpdateChecker()
+    private var updateTimer: Timer?
+    private var updateCheckWasManual = false
     private let releaseItem = NSMenuItem(
         title: "Release Knob While Display Sleeps",
         action: #selector(toggleReleaseOnDisplaySleep), keyEquivalent: "")
@@ -140,6 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Pref.pulseSpeed: PulseSpeed.normal.rawValue,
             Pref.pulseWaveform: PulseWaveform.tableA.rawValue,
             Pref.blockMusicLaunch: false,
+            Pref.autoUpdateCheck: true,
         ])
         refreshDoubleClickEnabled()
         ShortcutRunner.shared.refreshAvailable()
@@ -166,6 +178,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.refreshLED(now: false)
         }
         audioObserver.start()
+
+        updateChecker.onResult = { [weak self] result in
+            self?.handleUpdateResult(result)
+        }
+        maybeAutoCheckForUpdates()
+        updateTimer = Timer.scheduledTimer(
+            withTimeInterval: 24 * 3600, repeats: true
+        ) { [weak self] _ in
+            self?.maybeAutoCheckForUpdates()
+        }
 
         // Bring persisted per-app gains back for apps that are running.
         if #available(macOS 14.4, *) {
@@ -354,6 +376,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let about = NSMenuItem(title: "About PowerMate", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
+        updateCheckItem.target = self
+        menu.addItem(updateCheckItem)
+        autoUpdateItem.target = self
+        menu.addItem(autoUpdateItem)
         let quit = NSMenuItem(title: "Quit PowerMate", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
@@ -565,6 +591,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hudItem.state = defaults.bool(forKey: Pref.showHUD) ? .on : .off
         soundItem.state = defaults.bool(forKey: Pref.tickSound) ? .on : .off
         musicGuardItem.state = defaults.bool(forKey: Pref.blockMusicLaunch) ? .on : .off
+        autoUpdateItem.state = defaults.bool(forKey: Pref.autoUpdateCheck) ? .on : .off
+        updateCheckItem.title = updateChecker.available.map {
+            "Get PowerMate \($0.version)…"
+        } ?? "Check for Updates…"
         releaseItem.state = defaults.bool(forKey: Pref.releaseOnDisplaySleep) ? .on : .off
         accessibilityLine.isHidden = MediaKeys.trusted || !needsAccessibility
         rebuildProfilesMenu()
@@ -751,6 +781,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleMusicGuard() {
         defaults.set(!defaults.bool(forKey: Pref.blockMusicLaunch),
                      forKey: Pref.blockMusicLaunch)
+    }
+
+    // MARK: - Updates
+
+    /// Automatic checks run at most once every 20 hours, and only while
+    /// the toggle is on. A found update is announced once per version.
+    private func maybeAutoCheckForUpdates() {
+        guard defaults.bool(forKey: Pref.autoUpdateCheck) else { return }
+        let last = defaults.double(forKey: Pref.lastUpdateCheckAt)
+        guard Date().timeIntervalSince1970 - last > 20 * 3600 else { return }
+        defaults.set(Date().timeIntervalSince1970, forKey: Pref.lastUpdateCheckAt)
+        updateChecker.check()
+    }
+
+    private func handleUpdateResult(_ result: Result<UpdateChecker.Update?, Error>) {
+        let manual = updateCheckWasManual
+        updateCheckWasManual = false
+        switch result {
+        case .success(let update?):
+            if manual || defaults.string(forKey: Pref.lastNotifiedUpdate) != update.version {
+                defaults.set(update.version, forKey: Pref.lastNotifiedUpdate)
+                showTransient("PowerMate \(update.version) available", duration: 4)
+            }
+        case .success(nil):
+            if manual { showTransient("Up to date") }
+        case .failure:
+            if manual { showTransient("Update check failed") }
+        }
+    }
+
+    /// Manual entry point: checks, or opens the release page once an
+    /// update is known.
+    @objc private func checkForUpdates() {
+        if let update = updateChecker.available {
+            NSWorkspace.shared.open(update.pageURL)
+            return
+        }
+        updateCheckWasManual = true
+        updateChecker.check()
+    }
+
+    @objc private func toggleAutoUpdate() {
+        defaults.set(!defaults.bool(forKey: Pref.autoUpdateCheck),
+                     forKey: Pref.autoUpdateCheck)
     }
 
     private func handlePressedRotate(_ direction: Int) {
