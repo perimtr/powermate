@@ -64,7 +64,10 @@ To set one up: switch to the target app, open the PowerMate menu, and choose
 **App Profiles → Add Profile for “That App”** (opening the menu doesn't steal
 focus, so the app you were just using is the one offered). The new profile
 starts as a copy of your defaults; edit any gesture from its submenu under
-App Profiles, or remove it there too. Profiles match the frontmost app's
+App Profiles, or remove it there too. Each profile can also override the
+knob sensitivity and the **Volume HUD**: hide the bezel in apps that show
+volume feedback of their own (players, games), or force it on for one app
+while it's off everywhere else. Profiles match the frontmost app's
 bundle identifier; apps without a profile use the defaults from the top-level
 menus. The App Profiles menu also shows which profile is active right now.
 

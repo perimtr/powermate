@@ -509,6 +509,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return menu
     }
 
+    /// Per-profile HUD override: follow the global Volume HUD toggle, force
+    /// the bezel on, or suppress it for apps with volume feedback of their
+    /// own (the menu bar readout takes over when hidden).
+    private func hudGestureMenu(scope: String, current: String) -> NSMenu {
+        let menu = NSMenu()
+        let choices: [(title: String, raw: String)] = [
+            ("Use Default", ""), ("Shown", "shown"), ("Hidden", "hidden"),
+        ]
+        for choice in choices {
+            menu.addItem(bindingItem(
+                title: choice.title, scope: scope, field: "hud",
+                raw: choice.raw, isCurrent: current == choice.raw))
+        }
+        return menu
+    }
+
     /// The menu bar glyph. SF Symbols first: the system renders them natively
     /// in the menu bar (macOS 26 refuses to render drawing-handler-based
     /// template images there - they come out blank). The hand-drawn knob
@@ -974,7 +990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch appVolume.adjust(
             bundleID: bundleID, pid: front.processIdentifier, bySteps: steps * step) {
         case .adjusted(let gain):
-            if defaults.bool(forKey: Pref.showHUD) {
+            if hudEnabled {
                 hud.show(volume: gain, muted: gain == 0)
             }
             showTransient("\(name) \(Int((gain * 100).rounded()))%")
@@ -1022,10 +1038,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshLED(now: true)
     }
 
+    /// Whether the bezel should appear right now: the active profile can
+    /// force it on or off per app; otherwise the global toggle decides.
+    private var hudEnabled: Bool {
+        switch activeProfile().hudOverride {
+        case "shown": return true
+        case "hidden": return false
+        default: return defaults.bool(forKey: Pref.showHUD)
+        }
+    }
+
     /// Volume feedback: the floating HUD (or the menu bar readout when the
     /// HUD is disabled), plus the optional tick sound while turning.
     private func feedbackVolume(_ volume: Float32, muted: Bool) {
-        if defaults.bool(forKey: Pref.showHUD) {
+        if hudEnabled {
             hud.show(volume: Float(volume), muted: muted)
         } else {
             showTransient(muted ? "Muted" : "\(Int((volume * 100).rounded()))%")
@@ -1232,6 +1258,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                       current: entry.profile.pressTurn)),
                 ("Sensitivity", sensitivityGestureMenu(scope: entry.bundleID,
                                                        current: entry.profile.stepOverride)),
+                ("Volume HUD", hudGestureMenu(scope: entry.bundleID,
+                                              current: entry.profile.hudOverride)),
             ]
             for (title, submenu) in submenus {
                 let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")

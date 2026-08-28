@@ -207,10 +207,12 @@ lastNotifiedUpdate (String version), didAutoRegisterLoginItem,
 didDiscoverMenu (one-shot flags), appProfiles (dictionary).
 
 appProfiles: { bundleID: { name, rotate, click, doubleClick, longPress,
-pressTurn, rotateCW, rotateCCW, step } }, all string values. Custom
+pressTurn, rotateCW, rotateCCW, step, hud } }, all string values. Custom
 profiles (modes tied to no app) use keys "custom:<UUID>" and are skipped
 by frontmost matching automatically. step is a stringified Double or ""
-for "use the global sensitivity".
+for "use the global sensitivity". hud is "" (follow the global Volume
+HUD toggle), "shown", or "hidden" (suppress the bezel while this
+profile is active; the menu bar readout takes over).
 
 Action raw strings: playPause, mute, nextTrack, previousTrack, space,
 cycleProfile, cycleAudioOutput, none, and "shortcut:<Name>" for Run
@@ -338,7 +340,5 @@ downstream surfaces that display small (the website lists products at
 
 ## Roadmap ideas (not commitments)
 
-Per-app HUD suppression, a Developer ID + notarized release for
-downloads, a settings window if the menus outgrow themselves, and
-Bluetooth PowerMate support (a different device entirely; out of scope
-so far).
+A settings window if the menus outgrow themselves, and Bluetooth
+PowerMate support (a different device entirely; out of scope so far).

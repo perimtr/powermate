@@ -14,6 +14,10 @@ struct Profile {
     var rotateCCW: String = ""
     /// Volume step override as a string ("" = use the global sensitivity).
     var stepOverride: String = ""
+    /// Volume HUD override: "" follows the global toggle, "shown" forces
+    /// the bezel on for this app, "hidden" suppresses it (the menu bar
+    /// readout takes over), for apps with volume feedback of their own.
+    var hudOverride: String = ""
 
     var stepValue: Double? {
         stepOverride.isEmpty ? nil : Double(stepOverride)
@@ -21,7 +25,8 @@ struct Profile {
 
     init(rotate: RotateMode, click: KnobAction, doubleClick: KnobAction,
          longPress: KnobAction, pressTurn: PressTurnMode,
-         rotateCW: String = "", rotateCCW: String = "", stepOverride: String = "") {
+         rotateCW: String = "", rotateCCW: String = "", stepOverride: String = "",
+         hudOverride: String = "") {
         self.rotate = rotate
         self.click = click
         self.doubleClick = doubleClick
@@ -30,6 +35,7 @@ struct Profile {
         self.rotateCW = rotateCW
         self.rotateCCW = rotateCCW
         self.stepOverride = stepOverride
+        self.hudOverride = hudOverride
     }
 
     init(dict: [String: String]) {
@@ -41,6 +47,7 @@ struct Profile {
         rotateCW = dict["rotateCW"] ?? ""
         rotateCCW = dict["rotateCCW"] ?? ""
         stepOverride = dict["step"] ?? ""
+        hudOverride = dict["hud"] ?? ""
     }
 
     func asDict(name: String) -> [String: String] {
@@ -54,6 +61,7 @@ struct Profile {
             "rotateCW": rotateCW,
             "rotateCCW": rotateCCW,
             "step": stepOverride,
+            "hud": hudOverride,
         ]
     }
 }
