@@ -7,7 +7,8 @@ without relearning it. Read this before changing anything.
 
 A zero-dependency Swift menu bar app that makes the Griffin PowerMate USB
 knob (vendor 0x077D, product 0x0410) useful on modern macOS. Rotation
-controls volume (or scrolling, arrow keys, or Apple Shortcuts), the button
+controls volume (system-wide or the frontmost app's alone, or scrolling,
+arrow keys, or Apple Shortcuts), the button
 supports click / double-click / long-press / press-and-turn gestures, all
 remappable globally and per app, and the knob's blue LED is fully driven
 (brightness, breathing pulse with three selectable waveforms, off during
@@ -55,6 +56,14 @@ All sources in Sources/PowerMate/:
   output-device enumeration and default-output switching; and
   SystemAudioObserver, which follows volume/mute/device changes made
   outside the app so the LED never goes stale.
+- AppVolume.swift: the Frontmost App Volume rotate mode (macOS 14.4+).
+  A CoreAudio process tap on the app's audio processes (bundle id match
+  plus descendants of the app's pid, so browser helpers count) mutes
+  their direct path, and a private aggregate device replays the tapped
+  audio through the real output with a per-sample-ramped gain applied
+  in the IO callback. One engine per app, only while gain < 100%; gains
+  persist in appVolumeGains and re-apply on app launch. Engines rebuild
+  on default-device changes and refresh their process set when stale.
 - MediaKeys.swift: media key synthesis (NSEvent systemDefined subtype 8)
   and the Accessibility trust check.
 - SyntheticInput.swift: CGEvent scroll wheel and key press synthesis.
@@ -130,9 +139,15 @@ and verified against real hardware:
    SF Symbols (dial.medium.fill family) or pre-rasterized images.
 5. TCC: media keys, scrolling, arrow keys, and Space synthesis need
    Accessibility trust (AXIsProcessTrusted). Volume, mute, LED, and
-   Shortcuts do not. The app is ad-hoc signed, so a rebuild can
-   invalidate existing grants (toggle the checkbox off and on). Changing
-   the bundle id resets TCC, login items, and the defaults domain.
+   Shortcuts do not. The Frontmost App Volume mode needs System Audio
+   Recording approval (macOS prompts on the first tap) and, under the
+   hardened runtime, the com.apple.security.device.audio-input
+   entitlement, which the Makefile signs in from
+   Support/PowerMate.entitlements. Developer ID builds keep a stable
+   TCC identity across rebuilds; ad-hoc builds (no identity in the
+   keychain) can invalidate grants on every rebuild (toggle the
+   checkbox off and on). Changing the bundle id resets TCC, login
+   items, and the defaults domain.
 6. The knob does nothing on macOS without this app, and the pre-2019
    Griffin software does not run. Third-party remappers (USB Overdrive)
    attach at the HID event service level; if rotation ever does two
@@ -195,7 +210,9 @@ Action raw strings: playPause, mute, nextTrack, previousTrack, space,
 cycleProfile, cycleAudioOutput, none, and "shortcut:<Name>" for Run
 Shortcut bindings.
 Rotate modes: volume, scroll, scrollHorizontal, arrowsHorizontal,
-arrowsVertical, runShortcuts, none. Press-and-turn: skipTracks,
+arrowsVertical, runShortcuts, appVolume, none. appVolumeGains is a
+{bundleID: Double 0..1} dictionary holding per-app gains below 100%.
+Press-and-turn: skipTracks,
 fineVolume, none. Pulse speeds: slow, normal, fast. Pulse waveforms:
 tableA, tableB, tableC (firmware tables 0-2; A is the classic breathe).
 
@@ -279,6 +296,13 @@ downstream surfaces that display small (the website lists products at
   io.perimtr.powermate debugReenumerateOnConnect -bool true`, relaunch
   the app, and the log shows connect, "debug: re-enumerating on
   connect", a disconnect, and a clean re-seize. The flag is one-shot.
+- App-volume test without a knob: play something with a stable pid
+  (afplay a long file), `defaults write io.perimtr.powermate
+  debugAppVolumeTest -string "pid:<pid>"` (a bundle id also works),
+  relaunch, and the log shows the engine coming up, gain 100% -> 25%,
+  then realtime stats where ratio should be ~0.25 (callbacks and inRMS
+  nonzero prove audio is flowing through the tap), then teardown. The
+  flag is one-shot.
 - Settings inspection: `defaults read io.perimtr.powermate`.
 
 ## Related surfaces

@@ -80,6 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let pressTurnRoot = NSMenuItem(title: "Press & Turn", action: nil, keyEquivalent: "")
     private lazy var hud = VolumeHUD()
     private let audioObserver = SystemAudioObserver()
+    // Frontmost App Volume (macOS 14.4+). Stored untyped so the class can
+    // stay @available-gated; use the accessor below.
+    private var appVolumeStorage: Any?
     // When the app last posted a media key. macOS auto-launches Apple Music
     // in response to a media key nobody is playing for; the optional guard
     // only terminates a Music launch that follows one of OUR media keys.
@@ -163,6 +166,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.refreshLED(now: false)
         }
         audioObserver.start()
+
+        // Bring persisted per-app gains back for apps that are running.
+        if #available(macOS 14.4, *) {
+            _ = appVolume
+            if let target = defaults.string(forKey: "debugAppVolumeTest") {
+                defaults.removeObject(forKey: "debugAppVolumeTest")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [weak self] in
+                    self?.runAppVolumeDebugTest(target)
+                }
+            }
+        }
 
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(self, selector: #selector(systemWillSleep),
@@ -796,6 +810,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         switch activeProfile().rotate {
         case .volume:
             adjustVolume(bySteps: Double(signed))
+        case .appVolume:
+            adjustAppVolume(bySteps: Double(signed))
         case .scroll:
             // Clockwise scrolls down, like rolling a wheel; ~10 px per count.
             postSynthetic { SyntheticInput.scroll(vertical: Int32(-signed * 10)) }
@@ -856,6 +872,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         SystemAudio.setVolume(newVolume, of: device)
         feedbackVolume(newVolume, muted: false)
         refreshLED(now: false)
+    }
+
+    @available(macOS 14.4, *)
+    private var appVolume: AppVolumeController {
+        if let controller = appVolumeStorage as? AppVolumeController { return controller }
+        let controller = AppVolumeController()
+        appVolumeStorage = controller
+        return controller
+    }
+
+    /// Frontmost App Volume: the knob adjusts the gain of whatever app is in
+    /// front, leaving the system volume alone.
+    private func adjustAppVolume(bySteps steps: Double) {
+        guard #available(macOS 14.4, *) else {
+            showTransient("Needs macOS 14.4")
+            return
+        }
+        guard let front = NSWorkspace.shared.frontmostApplication,
+              let bundleID = front.bundleIdentifier
+        else {
+            showTransient("n/a")
+            return
+        }
+        let name = front.localizedName ?? bundleID
+        let step = activeProfile().stepValue ?? defaults.double(forKey: Pref.step)
+        switch appVolume.adjust(
+            bundleID: bundleID, pid: front.processIdentifier, bySteps: steps * step) {
+        case .adjusted(let gain):
+            if defaults.bool(forKey: Pref.showHUD) {
+                hud.show(volume: gain, muted: gain == 0)
+            }
+            showTransient("\(name) \(Int((gain * 100).rounded()))%")
+        case .noAudio:
+            showTransient("\(name): no audio")
+        case .failed:
+            showTransient("n/a")
+        }
+    }
+
+    /// Verification recipe: `defaults write io.perimtr.powermate
+    /// debugAppVolumeTest -string "pid:<pid>"` (or a bundle id), relaunch,
+    /// and the log shows the engine coming up, the realtime statistics, and
+    /// the teardown, with no knob involved. One-shot.
+    @available(macOS 14.4, *)
+    private func runAppVolumeDebugTest(_ target: String) {
+        var pid: pid_t = 0
+        var bundleID = target
+        if target.hasPrefix("pid:"), let value = pid_t(target.dropFirst(4)) {
+            pid = value
+            bundleID = "debug.pid.\(value)"
+        } else if let app = NSWorkspace.shared.runningApplications
+            .first(where: { $0.bundleIdentifier == target }) {
+            pid = app.processIdentifier
+        }
+        logger.info("debug: app volume test target \(bundleID, privacy: .public) pid \(pid, privacy: .public)")
+        let result = appVolume.adjust(bundleID: bundleID, pid: pid, bySteps: -0.75)
+        logger.info("debug: app volume adjust -> \(String(describing: result), privacy: .public)")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            guard let self else { return }
+            logger.info("debug: app volume stats \(self.appVolume.debugStats(bundleID: bundleID), privacy: .public)")
+            _ = self.appVolume.adjust(bundleID: bundleID, pid: pid, bySteps: 1)
+            logger.info("debug: app volume test done (gain restored)")
+        }
     }
 
     private func toggleMute() {

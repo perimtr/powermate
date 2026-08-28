@@ -26,12 +26,16 @@ All button gestures are remappable from the menu; the defaults:
 | Press & turn           | Skip tracks (or fine volume / nothing)        |
 
 Available actions per button gesture: Play/Pause, Mute, Next Track, Previous
-Track, Space Bar, **Run Shortcut** (any shortcut from the Shortcuts app), or
-Do Nothing. Media actions send the same events as the keyboard media keys, so
-they control Music, Spotify, browsers - whatever owns Now Playing. Rotation
-itself is also remappable: System Volume, Scroll, Scroll Sideways, Arrow Keys
-← → / ↑ ↓, **Run Shortcuts** (a clockwise/counter-clockwise shortcut pair,
-stepped one run per ~⅕ turn), or Do Nothing.
+Track, Space Bar, Switch Profile, Cycle Audio Output, **Run Shortcut** (any
+shortcut from the Shortcuts app), or Do Nothing. Media actions send the same
+events as the keyboard media keys, so they control Music, Spotify, browsers -
+whatever owns Now Playing. Rotation itself is also remappable: System Volume,
+**Frontmost App Volume** (macOS 14.4 and newer: the knob turns down just the
+app in front - the browser, a game, a video call - leaving everything else
+alone, and the per-app level sticks until you raise it back), Scroll, Scroll
+Sideways, Arrow Keys ← → / ↑ ↓, **Run Shortcuts** (a clockwise/
+counter-clockwise shortcut pair, stepped one run per ~⅕ turn), or Do
+Nothing.
 
 ## Run Shortcut actions
 
@@ -141,6 +145,11 @@ Once installed, tick **Start at Login** in the app's menu to make it permanent.
 - **Input Monitoring** - macOS may gate HID input. If the menu shows
   "Permission Required", grant it under **System Settings → Privacy &
   Security → Input Monitoring**, then relaunch the app.
+- **System Audio Recording** - requested only the first time you use the
+  Frontmost App Volume rotate mode. macOS files per-app volume under
+  this permission because the app's audio passes through PowerMate's
+  gain stage on its way to the speaker; nothing is recorded or stored
+  (see [PRIVACY.md](PRIVACY.md)).
 
 Developer ID builds keep a stable code identity, so permission grants
 survive rebuilds. Ad-hoc builds (no certificate in the keychain) can

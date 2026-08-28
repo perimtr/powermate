@@ -90,6 +90,7 @@ enum PressTurnMode: String, CaseIterable {
 /// steps through a clockwise/counter-clockwise shortcut pair.
 enum RotateMode: String, CaseIterable {
     case volume
+    case appVolume
     case scroll
     case scrollHorizontal
     case arrowsHorizontal
@@ -100,6 +101,7 @@ enum RotateMode: String, CaseIterable {
     var title: String {
         switch self {
         case .volume: return "System Volume"
+        case .appVolume: return "Frontmost App Volume"
         case .scroll: return "Scroll"
         case .scrollHorizontal: return "Scroll Sideways"
         case .arrowsHorizontal: return "Arrow Keys ← →"

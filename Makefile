@@ -26,10 +26,12 @@ app: build
 	cp Support/Info.plist $(DIST)/Contents/Info.plist
 	cp Support/AppIcon.icns $(DIST)/Contents/Resources/AppIcon.icns
 ifneq ($(SIGN_ID),)
-	codesign --force --options runtime --timestamp --sign "$(SIGN_ID)" $(DIST)
+	codesign --force --options runtime --timestamp \
+		--entitlements Support/PowerMate.entitlements \
+		--sign "$(SIGN_ID)" $(DIST)
 	@echo "Built $(DIST) (Developer ID, hardened runtime)"
 else
-	codesign --force --sign - $(DIST)
+	codesign --force --entitlements Support/PowerMate.entitlements --sign - $(DIST)
 	@echo "Built $(DIST) (ad-hoc)"
 endif
 

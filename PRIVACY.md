@@ -29,6 +29,12 @@ for updates, and never transmits anything.
   key-press events locally when you bind those actions to the knob
 - **Input Monitoring**, where macOS requires it, covers only the
   PowerMate device's own reports
+- **System Audio Recording** is requested only if you use the Frontmost
+  App Volume mode. macOS files per-app volume control under this
+  permission because the app's audio is routed through PowerMate's gain
+  stage on its way to the speaker. The samples pass through one realtime
+  callback and are never written anywhere, recorded, or analyzed; the
+  permission is never requested if you don't use the mode
 - Shortcuts bound to knob gestures run through Apple's Shortcuts app
   with the permissions you granted there
 
