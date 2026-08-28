@@ -51,7 +51,10 @@ All sources in Sources/PowerMate/:
 - PowerMateLED.swift: LED control through IOUSBDeviceInterface vendor
   control requests. PulseSpeed and PulseWaveform presets live here.
 - SystemAudio.swift: CoreAudio default-output volume and mute, with
-  per-channel fallback and software mute when hardware mute is absent.
+  per-channel fallback and software mute when hardware mute is absent;
+  output-device enumeration and default-output switching; and
+  SystemAudioObserver, which follows volume/mute/device changes made
+  outside the app so the LED never goes stale.
 - MediaKeys.swift: media key synthesis (NSEvent systemDefined subtype 8)
   and the Accessibility trust check.
 - SyntheticInput.swift: CGEvent scroll wheel and key press synthesis.
@@ -178,7 +181,8 @@ pressTurnMode, rotateShortcutCW, rotateShortcutCCW, pulseSpeed,
 pulseWaveform (raw strings), ledMode (0 follow volume / 1 always on /
 2 off),
 pulseWhenMuted, pulseWhileAsleep, showHUD, tickSound,
-releaseWhenDisplaySleeps (Bools), didAutoRegisterLoginItem,
+releaseWhenDisplaySleeps, blockMusicAutoLaunch (Bools),
+didAutoRegisterLoginItem,
 didDiscoverMenu (one-shot flags), appProfiles (dictionary).
 
 appProfiles: { bundleID: { name, rotate, click, doubleClick, longPress,
@@ -188,7 +192,8 @@ by frontmost matching automatically. step is a stringified Double or ""
 for "use the global sensitivity".
 
 Action raw strings: playPause, mute, nextTrack, previousTrack, space,
-cycleProfile, none, and "shortcut:<Name>" for Run Shortcut bindings.
+cycleProfile, cycleAudioOutput, none, and "shortcut:<Name>" for Run
+Shortcut bindings.
 Rotate modes: volume, scroll, scrollHorizontal, arrowsHorizontal,
 arrowsVertical, runShortcuts, none. Press-and-turn: skipTracks,
 fineVolume, none. Pulse speeds: slow, normal, fast. Pulse waveforms:

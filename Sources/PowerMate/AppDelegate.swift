@@ -26,6 +26,7 @@ enum Pref {
     static let rotateShortcutCCW = "rotateShortcutCCW"
     static let pulseSpeed = "pulseSpeed"
     static let pulseWaveform = "pulseWaveform"
+    static let blockMusicLaunch = "blockMusicAutoLaunch"
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -47,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         title: "Volume HUD", action: #selector(toggleHUD), keyEquivalent: "")
     private let soundItem = NSMenuItem(
         title: "Sound When Turning", action: #selector(toggleTickSound), keyEquivalent: "")
+    private let musicGuardItem = NSMenuItem(
+        title: "Stop Apple Music Auto-Launch",
+        action: #selector(toggleMusicGuard), keyEquivalent: "")
     private let releaseItem = NSMenuItem(
         title: "Release Knob While Display Sleeps",
         action: #selector(toggleReleaseOnDisplaySleep), keyEquivalent: "")
@@ -75,6 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let longPressRoot = NSMenuItem(title: "Long Press", action: nil, keyEquivalent: "")
     private let pressTurnRoot = NSMenuItem(title: "Press & Turn", action: nil, keyEquivalent: "")
     private lazy var hud = VolumeHUD()
+    private let audioObserver = SystemAudioObserver()
+    // When the app last posted a media key. macOS auto-launches Apple Music
+    // in response to a media key nobody is playing for; the optional guard
+    // only terminates a Music launch that follows one of OUR media keys.
+    private var lastMediaKeyPost = Date.distantPast
     private var isPaused = false
     private let tick = NSSound(named: "Tink")
     private var lastTick = Date.distantPast
@@ -127,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Pref.rotateShortcutCW: "", Pref.rotateShortcutCCW: "",
             Pref.pulseSpeed: PulseSpeed.normal.rawValue,
             Pref.pulseWaveform: PulseWaveform.tableA.rawValue,
+            Pref.blockMusicLaunch: false,
         ])
         refreshDoubleClickEnabled()
         ShortcutRunner.shared.refreshAvailable()
@@ -147,6 +157,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.checkForWedge()
         }
 
+        // Follow volume and mute changes made outside the app (keyboard
+        // keys, other apps), so the LED never goes stale.
+        audioObserver.onChange = { [weak self] in
+            self?.refreshLED(now: false)
+        }
+        audioObserver.start()
+
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(self, selector: #selector(systemWillSleep),
                               name: NSWorkspace.willSleepNotification, object: nil)
@@ -156,6 +173,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                               name: NSWorkspace.screensDidSleepNotification, object: nil)
         workspace.addObserver(self, selector: #selector(screensDidWake),
                               name: NSWorkspace.screensDidWakeNotification, object: nil)
+        workspace.addObserver(self, selector: #selector(appDidLaunch(_:)),
+                              name: NSWorkspace.didLaunchApplicationNotification, object: nil)
 
         // A menu bar utility for a physical knob is useless if it dies with
         // every reboot, so register as a login item once, automatically. The
@@ -308,6 +327,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(hudItem)
         soundItem.target = self
         menu.addItem(soundItem)
+        musicGuardItem.target = self
+        menu.addItem(musicGuardItem)
         releaseItem.target = self
         menu.addItem(releaseItem)
 
@@ -529,6 +550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pauseItem.state = isPaused ? .on : .off
         hudItem.state = defaults.bool(forKey: Pref.showHUD) ? .on : .off
         soundItem.state = defaults.bool(forKey: Pref.tickSound) ? .on : .off
+        musicGuardItem.state = defaults.bool(forKey: Pref.blockMusicLaunch) ? .on : .off
         releaseItem.state = defaults.bool(forKey: Pref.releaseOnDisplaySleep) ? .on : .off
         accessibilityLine.isHidden = MediaKeys.trusted || !needsAccessibility
         rebuildProfilesMenu()
@@ -672,8 +694,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .mute: toggleMute()
         case .shortcut(let name): ShortcutRunner.shared.run(name)
         case .cycleProfile: cycleProfile()
+        case .cycleAudioOutput: cycleAudioOutput()
         case .none: break
         }
+    }
+
+    /// Hop the default output to the next device, alphabetically. CoreAudio
+    /// only; no permissions involved. The audio observer refreshes the LED
+    /// against the new device on its own.
+    private func cycleAudioOutput() {
+        let devices = SystemAudio.outputDevices()
+        guard !devices.isEmpty else {
+            showTransient("n/a")
+            return
+        }
+        let current = SystemAudio.defaultOutputDevice()
+        let index = devices.firstIndex { $0.id == current } ?? -1
+        let next = devices[(index + 1) % devices.count]
+        if SystemAudio.setDefaultOutputDevice(next.id) {
+            showTransient(next.name, duration: 2)
+        } else {
+            showTransient("n/a")
+        }
+    }
+
+    /// The optional Apple Music guard: macOS launches Music for a media key
+    /// that no running player claims. When one of OUR media keys did that,
+    /// and the option is on, close it again before it takes over.
+    @objc private func appDidLaunch(_ note: Notification) {
+        guard defaults.bool(forKey: Pref.blockMusicLaunch),
+              Date().timeIntervalSince(lastMediaKeyPost) < 3,
+              let app = note.userInfo?[NSWorkspace.applicationUserInfoKey]
+                  as? NSRunningApplication,
+              let bundleID = app.bundleIdentifier,
+              bundleID == "com.apple.Music" || bundleID == "com.apple.iTunes"
+        else { return }
+        logger.info("Terminating Apple Music auto-launch after a knob media key")
+        app.terminate()
+        showTransient("Music blocked")
+    }
+
+    @objc private func toggleMusicGuard() {
+        defaults.set(!defaults.bool(forKey: Pref.blockMusicLaunch),
+                     forKey: Pref.blockMusicLaunch)
     }
 
     private func handlePressedRotate(_ direction: Int) {
@@ -703,6 +766,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             accessibilityNeeded()
             return
         }
+        lastMediaKeyPost = Date()
         MediaKeys.post(key)
     }
 

@@ -90,7 +90,8 @@ and need the same one-time Accessibility grant as the media keys.
 Extras:
 
 - The current volume appears briefly next to the menu bar icon as you turn.
-- The knob's blue LED tracks the volume level (bright = loud) and breathes
+- The knob's blue LED tracks the volume level (bright = loud), follows
+  changes made anywhere (keyboard keys, other apps), and breathes
   slowly while muted, using the device's hardware pulse mode. Switch the LED
   to "Always On" or "Off", or disable "Pulse When Muted", in the menu.
   The LED is single-color blue hardware - brightness and pulsing are the only
@@ -156,12 +157,18 @@ to verify: [PRIVACY.md](PRIVACY.md).
 - **Pause PowerMate** - temporarily ignore the knob (until toggled back;
   not persisted across launches). The LED goes dark while paused.
 - **Click / Double-Click / Long Press / Press & Turn** - remap each gesture.
-  Setting Double-Click to "Do Nothing" removes the short delay before single
-  clicks fire.
+  Actions include media keys, mute, Space, profile switching, cycling the
+  default audio output device, and any Apple Shortcut. Setting Double-Click
+  to "Do Nothing" removes the short delay before single clicks fire.
 - **Volume HUD** - the floating volume bezel shown while turning; disable it
   to get the small menu-bar readout instead.
 - **Sound When Turning** - an audible tick as the volume changes (off by
   default).
+- **Stop Apple Music Auto-Launch** - off by default. macOS opens Apple
+  Music whenever a media key fires with no player running, so a knob
+  play/pause can summon it by accident; with this on, a Music launch in
+  the few seconds after a knob media key is closed again. Opening Music
+  yourself is never touched.
 - **Release Knob While Display Sleeps** - on by default: when the screen
   turns off, the app closes the device entirely so it can suspend on the USB
   bus and never holds up the Mac's own idle sleep. Bonus: while released,

@@ -10,6 +10,7 @@ enum KnobAction: Equatable, Hashable {
     case previousTrack
     case space
     case cycleProfile
+    case cycleAudioOutput
     case none
     case shortcut(String)
 
@@ -17,7 +18,8 @@ enum KnobAction: Equatable, Hashable {
 
     /// The fixed, non-parameterized actions, in menu order.
     static let fixed: [KnobAction] = [
-        .playPause, .mute, .nextTrack, .previousTrack, .space, .cycleProfile, .none,
+        .playPause, .mute, .nextTrack, .previousTrack, .space, .cycleProfile,
+        .cycleAudioOutput, .none,
     ]
 
     init(raw: String) {
@@ -28,6 +30,7 @@ enum KnobAction: Equatable, Hashable {
         case "previousTrack": self = .previousTrack
         case "space": self = .space
         case "cycleProfile": self = .cycleProfile
+        case "cycleAudioOutput": self = .cycleAudioOutput
         case "none": self = .none
         default:
             if raw.hasPrefix(Self.shortcutPrefix) {
@@ -46,6 +49,7 @@ enum KnobAction: Equatable, Hashable {
         case .previousTrack: return "previousTrack"
         case .space: return "space"
         case .cycleProfile: return "cycleProfile"
+        case .cycleAudioOutput: return "cycleAudioOutput"
         case .none: return "none"
         case .shortcut(let name): return Self.shortcutPrefix + name
         }
@@ -59,6 +63,7 @@ enum KnobAction: Equatable, Hashable {
         case .previousTrack: return "Previous Track"
         case .space: return "Space Bar"
         case .cycleProfile: return "Switch Profile (cycle)"
+        case .cycleAudioOutput: return "Cycle Audio Output"
         case .none: return "Do Nothing"
         case .shortcut(let name): return "Shortcut: \(name)"
         }
