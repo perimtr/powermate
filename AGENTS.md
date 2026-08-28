@@ -350,7 +350,10 @@ downstream surfaces that display small (the website lists products at
   protection, and private vulnerability reporting in repo settings, and
   give the site's PowerMate card a working GitHub link.
 
-## Roadmap ideas (not commitments)
+## Scope
 
-Bluetooth PowerMate support (a different device entirely; out of scope
-so far).
+The original roadmap is complete; there are no planned features. The
+Bluetooth PowerMate is a different device entirely and is out of scope
+by the owner's decision (2026-08-28): this app drives the USB model
+(077d:0410) only. Do not start Bluetooth support without the owner
+asking for it.
