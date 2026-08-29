@@ -27,6 +27,10 @@ enum Pref {
     static let pulseSpeed = "pulseSpeed"
     static let pulseWaveform = "pulseWaveform"
     static let blockMusicLaunch = "blockMusicAutoLaunch"
+    static let midiEnabled = "midiControllerEnabled"
+    static let midiKnobCC = "midiKnobCC"
+    static let midiButtonNote = "midiButtonNote"
+    static let midiRelativeEncoder = "midiRelativeEncoder"
     static let autoUpdateCheck = "checkForUpdatesAutomatically"
     static let lastUpdateCheckAt = "lastUpdateCheckAt"
     static let lastNotifiedUpdate = "lastNotifiedUpdate"
@@ -59,6 +63,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let autoUpdateItem = NSMenuItem(
         title: "Check for Updates Automatically",
         action: #selector(toggleAutoUpdate), keyEquivalent: "")
+    // A MIDI controller as a second input source (prototype). Its gestures
+    // land in the same handlers as the knob's.
+    private let midi = MIDISource()
+    private let midiItem = NSMenuItem(
+        title: "Use a MIDI Controller", action: #selector(toggleMIDI), keyEquivalent: "")
+    private let midiRelearnItem = NSMenuItem(
+        title: "Relearn MIDI Knob and Button",
+        action: #selector(relearnMIDI), keyEquivalent: "")
     private let updateChecker = UpdateChecker()
     private var updateTimer: Timer?
     private var updateCheckWasManual = false
@@ -167,7 +179,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         setUpStatusItem()
         wireDeviceCallbacks()
+        wireMIDICallbacks()
         hid.start()
+        if defaults.bool(forKey: Pref.midiEnabled) { midi.start() }
 
         wedgeTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
             self?.checkForWedge()
@@ -377,6 +391,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(soundItem)
         musicGuardItem.target = self
         menu.addItem(musicGuardItem)
+        midiItem.target = self
+        menu.addItem(midiItem)
+        midiRelearnItem.target = self
+        menu.addItem(midiRelearnItem)
         releaseItem.target = self
         menu.addItem(releaseItem)
 
@@ -619,6 +637,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hudItem.state = defaults.bool(forKey: Pref.showHUD) ? .on : .off
         soundItem.state = defaults.bool(forKey: Pref.tickSound) ? .on : .off
         musicGuardItem.state = defaults.bool(forKey: Pref.blockMusicLaunch) ? .on : .off
+        let midiOn = defaults.bool(forKey: Pref.midiEnabled)
+        midiItem.state = midiOn ? .on : .off
+        midiRelearnItem.isHidden = !midiOn
+        midiRelearnItem.title = "Relearn MIDI Knob and Button (\(midi.describeLearned()))"
         autoUpdateItem.state = defaults.bool(forKey: Pref.autoUpdateCheck) ? .on : .off
         updateCheckItem.title = updateChecker.available.map {
             "Get PowerMate \($0.version)…"
@@ -688,6 +710,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// The MIDI source lands in exactly the same handlers as the knob, which
+    /// is the whole point: everything downstream is input-agnostic.
+    private func wireMIDICallbacks() {
+        midi.onRotate = { [weak self] delta in self?.handleRotate(delta) }
+        midi.onClick = { [weak self] in
+            guard let self else { return }
+            self.perform(self.activeProfile().click)
+        }
+        midi.onDoubleClick = { [weak self] in
+            guard let self else { return }
+            self.perform(self.activeProfile().doubleClick)
+        }
+        midi.onLongPress = { [weak self] in
+            guard let self else { return }
+            self.perform(self.activeProfile().longPress)
+        }
+        midi.onPressedRotate = { [weak self] direction in
+            self?.handlePressedRotate(direction)
+        }
+        midi.onLearned = { [weak self] description in
+            self?.showTransient(description, duration: 2.5)
+        }
+    }
+
+    @objc private func toggleMIDI() {
+        let enable = !defaults.bool(forKey: Pref.midiEnabled)
+        defaults.set(enable, forKey: Pref.midiEnabled)
+        if enable {
+            midi.doubleClickEnabled = hid.doubleClickEnabled
+            midi.start()
+            showTransient(
+                midi.describeLearned().contains("unlearned")
+                    ? "Turn a knob, then press a button" : "MIDI on",
+                duration: 3)
+        } else {
+            midi.stop()
+            showTransient("MIDI off")
+        }
+    }
+
+    @objc private func relearnMIDI() {
+        midi.relearn()
+        showTransient("Turn a knob, then press a button", duration: 3)
+    }
+
     // MARK: - Actions
 
     /// The bindings in effect right now: the pinned profile if one is set,
@@ -744,7 +811,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshDoubleClickEnabled() {
         let profiles = [store.defaultProfile] + store.appProfiles.map(\.profile)
-        hid.doubleClickEnabled = profiles.contains { $0.doubleClick != KnobAction.none }
+        let enabled = profiles.contains { $0.doubleClick != KnobAction.none }
+        hid.doubleClickEnabled = enabled
+        midi.doubleClickEnabled = enabled
     }
 
     private func declareUserActivity() {

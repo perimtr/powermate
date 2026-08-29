@@ -74,6 +74,17 @@ All sources in Sources/PowerMate/:
   CFBundleShortVersionString; automatic checks are daily, toggleable,
   and never download anything. PRIVACY.md documents the request; keep
   the two in sync.
+- KnobGestures.swift (midi-source branch): the click / double-click /
+  long-press / press-and-turn timing, extracted so any input source can
+  produce the app's gestures. PowerMateHID still carries its own copy;
+  it should adopt this class when a second source ships for real.
+- MIDISource.swift (midi-source branch): a MIDI controller as a second
+  input source. CoreMIDI input port, MIDI 1.0 universal packets parsed
+  for control change and note messages, feeding KnobGestures and then
+  the same AppDelegate handlers the knob uses. The first CC becomes the
+  knob and the first note the button (relearnable); absolute values are
+  differenced, relative encoders decoded as two's complement. No seize,
+  no TCC, no power assertions apply. Opt-in behind midiControllerEnabled.
 - KnobAction.swift: action and mode enums with raw-string serialization.
 - Profiles.swift: Profile struct and ProfileStore (UserDefaults-backed
   per-app profile dictionaries).
@@ -313,6 +324,13 @@ downstream surfaces that display small (the website lists products at
   io.perimtr.powermate debugReenumerateOnConnect -bool true`, relaunch
   the app, and the log shows connect, "debug: re-enumerating on
   connect", a disconnect, and a clean re-seize. The flag is one-shot.
+- MIDI test without a controller (midi-source branch): a virtual MIDI
+  source can drive the app. Create one with MIDISourceCreateWithProtocol
+  in a small CLI, send CC and note messages as MIDI 1.0 universal
+  packets, and the log shows "MIDI source: <name>", "MIDI: learned knob
+  = CC n", "MIDI rotate delta=n" and the button lines, with the volume
+  actually moving. Hot-plug works: a source created after the app
+  starts is picked up through the setup-changed notification.
 - Settings-window smoke test: `defaults write io.perimtr.powermate
   debugOpenSettings -bool true`, relaunch, and the window opens two
   seconds later ("debug: settings window opened" at info). One-shot.
