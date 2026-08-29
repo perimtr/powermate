@@ -333,6 +333,16 @@ downstream surfaces that display small (the website lists products at
 
 ## Related surfaces
 
+- Homebrew tap: github.com/perimtr/homebrew-tap (local checkout
+  ~/Projects/homebrew-tap), installing via
+  `brew install --cask perimtr/tap/powermate`. Casks/powermate.rb pins
+  the version and the sha256 of PowerMate-<version>.dmg; a scheduled
+  workflow in that repo follows new releases and commits the update
+  itself (run it by hand right after cutting a release:
+  `gh workflow run "Update cask" --repo perimtr/homebrew-tap`). The
+  official homebrew-cask needs notability (roughly 75 stars or 30
+  forks/watchers), so submit there only once adoption justifies it.
+
 - Canonical family identity:
   ~/Projects/perimtr-website/design/PERIMTR-FAMILY-DESIGN-SYSTEM.md.
   Use it for shared brand, color, typography, naming presentation, and

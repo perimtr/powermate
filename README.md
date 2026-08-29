@@ -106,7 +106,24 @@ Extras:
 - Rotating while muted unmutes first, like the keyboard volume keys.
 - Hot-plug aware - connect/disconnect the knob any time.
 
-## Build & install
+## Install
+
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask perimtr/tap/powermate
+```
+
+Or download the disk image from the
+[latest release](https://github.com/perimtr/powermate/releases/latest)
+and drag the app to Applications. Either way the app is signed with the
+Perimtr LLC Developer ID and notarized by Apple, so it opens without
+Gatekeeper warnings.
+
+Launch it once, then tick **Start at Login** (menu or Settings window)
+to keep it running. Upgrades: `brew upgrade --cask powermate`.
+
+## Build from source
 
 Requires the Xcode Command Line Tools (`xcode-select --install`). Then:
 
@@ -137,7 +154,7 @@ Small sizes get simplified artwork: below 128px the generator crops to the
 knob, because the command glyph and the lettering on the base turn into a
 smudge at 16 and 32px. Check any icon change at those sizes.
 
-Once installed, tick **Start at Login** in the app's menu to make it permanent.
+Once built, tick **Start at Login** in the app's menu to make it permanent.
 
 ## Permissions
 
