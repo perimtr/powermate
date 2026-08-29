@@ -1,14 +1,17 @@
-// Builds the PowerMate .iconset from Support/appicon-source.png.
+// Draws the app icon: a knurled ring with the LED blue tucked into the
+// band as an indicator arc. Exploring the "Knurl" identity on this
+// branch, where the app is growing past a single device: the mark is
+// abstract knurling rather than a picture of anyone's hardware, so it
+// stays honest whether the input is the Griffin knob or a MIDI encoder.
 //
-// The artwork is composited into the standard macOS icon squircle
-// (80.5% of the canvas, corner radius 18.1%, transparent outside it).
+// The icon is drawn rather than composited, which is what lets the small
+// sizes differ. Fine knurling (44 shallow teeth) reads as milled metal at
+// 1024 and turns to mush in 16 pixels, so at and below 64 the tooth count
+// drops to 20 deeper teeth. Same trick the rendered artwork needed, for
+// the same reason: judge any change at 16 and 32, not only at 1024.
 //
-// Small sizes get DIFFERENT artwork, which is what .icns is for. The
-// full render carries a command glyph above the knob and lettering on
-// the base; both are illegible below about 128px and turn the icon into
-// a dark smudge. At 16, 32 and 64 pixels the source is cropped to the
-// knob itself, so the aluminium disc and the blue LED ring fill the
-// tile and still read. Apple simplifies its own icons the same way.
+// Palette is the product's own: graphite #121217, cream #F2EFE6, and the
+// knob's LED blue #409EFF, which is also the accent on the website.
 //
 // Run from the repo root:
 //   swift Support/make_appicon.swift Support/AppIcon.iconset
@@ -16,81 +19,87 @@
 
 import AppKit
 
-let sourcePath = "Support/appicon-source.png"
-guard let source = NSImage(contentsOfFile: sourcePath) else {
-    fputs("\(sourcePath) not found (run from the repo root)\n", stderr)
-    exit(1)
-}
-var proposed = NSRect(origin: .zero, size: source.size)
-guard let full = source.cgImage(forProposedRect: &proposed, context: nil, hints: nil) else {
-    fputs("could not read \(sourcePath) as a bitmap\n", stderr)
-    exit(1)
-}
+let graphite = NSColor(calibratedRed: 0.070, green: 0.070, blue: 0.090, alpha: 1)
+let cream = NSColor(calibratedRed: 0.949, green: 0.937, blue: 0.902, alpha: 1)
+let ledBlue = NSColor(calibratedRed: 0.251, green: 0.620, blue: 1.0, alpha: 1)
 
-// The knob and its full glow, without the command glyph above it.
-// Expressed as fractions of the source so the crop survives a re-render
-// at another resolution. The knob with its LED ring spans nearly the
-// whole width of the artwork, so this is wide: cropping tighter clips
-// the glow and leaves the disc jammed against the frame.
-let knobCrop = CGRect(
-    x: CGFloat(full.width) * 0.106, y: CGFloat(full.height) * 0.216,
-    width: CGFloat(full.width) * 0.788, height: CGFloat(full.height) * 0.788)
-guard let knob = full.cropping(to: knobCrop) else {
-    fputs("crop failed\n", stderr)
-    exit(1)
-}
-
-// The artwork's own background, sampled from a corner that is only
-// background, so the padding around the knob is the same material.
-let backdrop: NSColor = {
-    let rep = NSBitmapImageRep(cgImage: full)
-    return rep.colorAt(x: 6, y: 6) ?? NSColor(calibratedWhite: 0.09, alpha: 1)
-}()
-
-/// How much of the small tile the knob occupies. The rest is backdrop,
-/// which is what keeps the disc from touching the edge.
-let knobScale: CGFloat = 0.86
-
-/// Pixel sizes at or below this use the simplified artwork.
+/// Pixel sizes at or below this get the simplified tooth count.
 let smallSizeCutoff = 64
 
-/// `squircle: false` writes the art edge to edge. macOS wants the icon
-/// grid's inset and transparent corners, but a web surface applies its
-/// own rounding, and handing it the inset version makes the icon render
-/// visibly smaller than icons that fill their frame.
-func render(
-    _ art: CGImage, size: Int, to url: URL,
-    squircle: Bool = true, padWith backdrop: NSColor? = nil, scale: CGFloat = 1
-) {
+/// A circle milled into teeth. Shallow teeth read as a machined edge;
+/// deep ones start to look like a gear, so keep depth small at large sizes.
+func knurledPath(center: NSPoint, radius: CGFloat, teeth: Int, depth: CGFloat) -> NSBezierPath {
+    let path = NSBezierPath()
+    let steps = teeth * 2
+    for index in 0..<steps {
+        let angle = (CGFloat(index) / CGFloat(steps)) * 2 * .pi
+        let r = index % 2 == 0 ? radius : radius - depth
+        let point = NSPoint(x: center.x + r * cos(angle), y: center.y + r * sin(angle))
+        if index == 0 { path.move(to: point) } else { path.line(to: point) }
+    }
+    path.close()
+    return path
+}
+
+func circle(_ center: NSPoint, _ radius: CGFloat) -> NSBezierPath {
+    NSBezierPath(ovalIn: NSRect(x: center.x - radius, y: center.y - radius,
+                                width: radius * 2, height: radius * 2))
+}
+
+/// `squircle: false` draws the mark edge to edge. macOS wants the icon
+/// grid's inset and transparent corners; a web surface rounds the image
+/// itself, and handing it the inset version renders visibly smaller than
+/// the icons beside it.
+func draw(side: CGFloat, squircle: Bool) {
+    // The mark is laid out against the 1024 grid and scaled from there.
+    let scale = side / 1024
+    let tile: NSRect
+    if squircle {
+        tile = NSRect(x: 100 * scale, y: 100 * scale,
+                      width: 824 * scale, height: 824 * scale)
+        NSBezierPath(roundedRect: tile, xRadius: 185 * scale, yRadius: 185 * scale).setClip()
+    } else {
+        tile = NSRect(x: 0, y: 0, width: side, height: side)
+    }
+    graphite.setFill()
+    tile.fill()
+
+    let center = NSPoint(x: tile.midX, y: tile.midY)
+    // Edge to edge, the ring grows to fill the frame it is given.
+    let outer = (squircle ? 300 : 372) * scale
+    let hole = (squircle ? 150 : 186) * scale
+    let fine = Int(side) > smallSizeCutoff
+    let teeth = fine ? 44 : 20
+    let depth = (fine ? 13 : 26) * scale
+
+    cream.setFill()
+    knurledPath(center: center, radius: outer, teeth: teeth, depth: depth).fill()
+    graphite.setFill()
+    circle(center, hole).fill()
+
+    // The indicator sits inside the band, with cream either side of it, so
+    // it reads as part of the knob rather than a sticker on top.
+    let bandInner = hole
+    let bandOuter = outer - depth
+    let arc = NSBezierPath()
+    arc.appendArc(withCenter: center, radius: (bandInner + bandOuter) / 2,
+                  startAngle: -58, endAngle: 58)
+    arc.lineWidth = (bandOuter - bandInner) * 0.52
+    arc.lineCapStyle = .round
+    ledBlue.setStroke()
+    arc.stroke()
+}
+
+func render(side: Int, to url: URL, squircle: Bool = true) {
     let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8,
+        bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side, bitsPerSample: 8,
         samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     let context = NSGraphicsContext(bitmapImageRep: rep)!
     context.imageInterpolation = .high
     NSGraphicsContext.current = context
-
-    let side = CGFloat(size)
-    let tile = squircle
-        ? NSRect(x: side * 0.09766, y: side * 0.09766,
-                 width: side * 0.80469, height: side * 0.80469)
-        : NSRect(x: 0, y: 0, width: side, height: side)
-    if squircle {
-        NSBezierPath(
-            roundedRect: tile, xRadius: side * 0.18066, yRadius: side * 0.18066
-        ).setClip()
-    }
-    // Fill first so the space around a scaled-down knob is the artwork's
-    // own material rather than a transparent gap.
-    if let backdrop {
-        backdrop.setFill()
-        tile.fill()
-    }
-    let art_rect = tile.insetBy(
-        dx: tile.width * (1 - scale) / 2, dy: tile.height * (1 - scale) / 2)
-    context.cgContext.draw(art, in: art_rect)
-
+    draw(side: CGFloat(side), squircle: squircle)
     NSGraphicsContext.restoreGraphicsState()
     try! rep.representation(using: .png, properties: [:])!.write(to: url)
 }
@@ -107,23 +116,15 @@ let targets: [(String, Int)] = [
     ("icon_256x256.png", 256), ("icon_256x256@2x.png", 512),
     ("icon_512x512.png", 512), ("icon_512x512@2x.png", 1024),
 ]
-
 for (name, size) in targets {
-    let small = size <= smallSizeCutoff
-    render(
-        small ? knob : full, size: size, to: out.appendingPathComponent(name),
-        padWith: small ? backdrop : nil, scale: small ? knobScale : 1)
+    render(side: size, to: out.appendingPathComponent(name))
 }
 
-// The knob artwork at a size downstream surfaces can scale from. The
-// website lists products at 40px, which is small-size territory, so it
-// needs this rather than the full render. Written edge to edge: web
-// surfaces round it themselves, and the icon grid's inset would make it
-// render smaller than the icons beside it.
+// The mark at a size downstream surfaces can scale from. The website
+// lists products at 40px, which is small-size territory.
 let smallForWeb = out.deletingLastPathComponent()
     .appendingPathComponent("appicon-small-256.png")
-render(knob, size: 256, to: smallForWeb, squircle: false,
-       padWith: backdrop, scale: knobScale)
+render(side: 256, to: smallForWeb, squircle: false)
 
-print("wrote \(targets.count) sizes to \(out.path) (knob-only artwork at \(smallSizeCutoff)px and below)")
+print("wrote \(targets.count) sizes to \(out.path) (coarse teeth at \(smallSizeCutoff)px and below)")
 print("wrote \(smallForWeb.lastPathComponent) for downstream small-size use")
