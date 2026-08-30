@@ -29,8 +29,21 @@ final class MIDISource {
         set { gestures.doubleClickEnabled = newValue }
     }
 
+    /// A single message never moves the knob more than this. Controllers
+    /// emit their whole state on connect, faders sweep, and a value meant
+    /// as a position can arrive while relative mode is selected. Any of
+    /// those would otherwise slam the volume from one message.
+    private static let maxDeltaPerMessage = 8
+    /// How many messages a control must send before it can claim the knob.
+    /// One stray value should not win: controllers dump every CC at
+    /// startup, and a sleeve brushing a fader sends one message too.
+    private static let messagesToLearn = 3
+    /// Those messages have to arrive together, or they are not a gesture.
+    private static let learnWindow: TimeInterval = 2
+
     private let defaults = UserDefaults.standard
     private let gestures = KnobGestures()
+    private var learnCandidates: [Int: (count: Int, firstSeen: Date)] = [:]
     private var client = MIDIClientRef()
     private var port = MIDIPortRef()
     private var started = false
@@ -45,9 +58,24 @@ final class MIDISource {
         get { defaults.object(forKey: Pref.midiButtonNote) as? Int ?? -1 }
         set { defaults.set(newValue, forKey: Pref.midiButtonNote) }
     }
-    /// Endless encoders send relative ticks; potentiometers send positions.
-    private var relativeEncoder: Bool {
-        defaults.bool(forKey: Pref.midiRelativeEncoder)
+    /// How the knob reports movement. Potentiometers send a position;
+    /// endless encoders send ticks, in one of two conventions that look
+    /// nothing alike, so the controller decides which one applies.
+    enum EncoderMode: String {
+        /// A position, 0 to 127. The delta is the change since last time.
+        case absolute
+        /// Two's complement ticks: 1...63 clockwise, 65...127 the other way.
+        /// What most endless encoders send.
+        case relative
+        /// Signed bit ticks: 65...127 clockwise, 1...63 counter-clockwise.
+        /// Used by Mackie-style controllers, and the exact inverse of the
+        /// above, so guessing wrong reverses the knob rather than breaking it.
+        case relativeSigned
+    }
+
+    private var encoderMode: EncoderMode {
+        EncoderMode(rawValue: defaults.string(forKey: Pref.midiEncoderMode) ?? "")
+            ?? .absolute
     }
 
     init() {
@@ -119,6 +147,7 @@ final class MIDISource {
         learnedCC = -1
         learnedNote = -1
         lastValue = nil
+        learnCandidates.removeAll()
         logger.info("MIDI: relearning, turn a knob then press a button")
     }
 
@@ -165,15 +194,14 @@ final class MIDISource {
         switch kind {
         case 0xB0:  // control change
             if learnedCC < 0 {
-                learnedCC = data1
-                lastValue = nil
-                logger.info("MIDI: learned knob = CC \(data1, privacy: .public)")
-                onLearned?("Knob: CC \(data1)")
+                guard learn(candidate: data1) else { return }
             }
             guard data1 == learnedCC else { return }
             if let delta = rotationDelta(for: data2), delta != 0 {
-                logger.info("MIDI rotate delta=\(delta, privacy: .public)")
-                gestures.rotated(delta)
+                let clamped = max(-Self.maxDeltaPerMessage,
+                                  min(Self.maxDeltaPerMessage, delta))
+                logger.info("MIDI rotate delta=\(clamped, privacy: .public)")
+                gestures.rotated(clamped)
             }
         case 0x90 where data2 > 0:  // note on
             if learnedNote < 0 {
@@ -193,18 +221,41 @@ final class MIDISource {
         }
     }
 
-    /// Encoders report movement in one of two conventions. Relative mode
-    /// reads 1...63 as clockwise ticks and 65...127 as counter-clockwise
-    /// (two's complement, what most endless encoders send). Absolute mode
-    /// treats the value as a position and returns the change since the
-    /// last one, which is how a plain potentiometer behaves.
+    /// Decides whether a control has been moved deliberately enough to
+    /// become the knob. Returns true on the message that wins the slot.
+    private func learn(candidate cc: Int) -> Bool {
+        let now = Date()
+        var entry = learnCandidates[cc] ?? (count: 0, firstSeen: now)
+        if now.timeIntervalSince(entry.firstSeen) > Self.learnWindow {
+            entry = (count: 0, firstSeen: now)  // stale, start again
+        }
+        entry.count += 1
+        learnCandidates[cc] = entry
+        guard entry.count >= Self.messagesToLearn else { return false }
+
+        learnedCC = cc
+        lastValue = nil
+        learnCandidates.removeAll()
+        logger.info("MIDI: learned knob = CC \(cc, privacy: .public)")
+        onLearned?("Knob: CC \(cc)")
+        return true
+    }
+
+    /// nil means "no movement to report yet", which is different from a
+    /// delta of zero: the first absolute reading only establishes where
+    /// the knob is sitting.
     private func rotationDelta(for value: Int) -> Int? {
-        if relativeEncoder {
+        switch encoderMode {
+        case .relative:
             if value == 0 || value == 64 { return 0 }
             return value < 64 ? value : -(128 - value)
+        case .relativeSigned:
+            if value == 0 || value == 64 { return 0 }
+            return value > 64 ? value - 64 : -value
+        case .absolute:
+            defer { lastValue = value }
+            guard let last = lastValue else { return nil }
+            return value - last
         }
-        defer { lastValue = value }
-        guard let last = lastValue else { return nil }
-        return value - last
     }
 }

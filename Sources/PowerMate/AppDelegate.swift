@@ -30,7 +30,7 @@ enum Pref {
     static let midiEnabled = "midiControllerEnabled"
     static let midiKnobCC = "midiKnobCC"
     static let midiButtonNote = "midiButtonNote"
-    static let midiRelativeEncoder = "midiRelativeEncoder"
+    static let midiEncoderMode = "midiEncoderMode"
     static let autoUpdateCheck = "checkForUpdatesAutomatically"
     static let lastUpdateCheckAt = "lastUpdateCheckAt"
     static let lastNotifiedUpdate = "lastNotifiedUpdate"

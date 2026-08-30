@@ -75,16 +75,24 @@ All sources in Sources/PowerMate/:
   and never download anything. PRIVACY.md documents the request; keep
   the two in sync.
 - KnobGestures.swift (midi-source branch): the click / double-click /
-  long-press / press-and-turn timing, extracted so any input source can
-  produce the app's gestures. PowerMateHID still carries its own copy;
-  it should adopt this class when a second source ships for real.
+  long-press / press-and-turn timing, shared by every input source.
+  PowerMateHID and MIDISource both feed it raw button and rotation
+  events, so the knob and a MIDI encoder produce identical gestures and
+  the timing constants live in exactly one place.
 - MIDISource.swift (midi-source branch): a MIDI controller as a second
   input source. CoreMIDI input port, MIDI 1.0 universal packets parsed
   for control change and note messages, feeding KnobGestures and then
-  the same AppDelegate handlers the knob uses. The first CC becomes the
-  knob and the first note the button (relearnable); absolute values are
-  differenced, relative encoders decoded as two's complement. No seize,
-  no TCC, no power assertions apply. Opt-in behind midiControllerEnabled.
+  the same AppDelegate handlers the knob uses. No seize, no TCC, no
+  power assertions apply. Opt-in behind midiControllerEnabled. Two
+  details that came out of testing: a control must send three messages
+  within two seconds before it can claim the knob (controllers dump
+  every CC at startup, and one stray value should not win the slot),
+  and a single message never moves the knob more than 8 counts (a
+  swept fader read as rotation would otherwise slam the volume). Set
+  midiEncoderMode to absolute (a potentiometer position, differenced),
+  relative (two's complement ticks, most endless encoders) or
+  relativeSigned (Mackie-style; the exact inverse, so guessing wrong
+  reverses the knob rather than breaking it).
 - KnobAction.swift: action and mode enums with raw-string serialization.
 - Profiles.swift: Profile struct and ProfileStore (UserDefaults-backed
   per-app profile dictionaries).
@@ -330,7 +338,12 @@ downstream surfaces that display small (the website lists products at
   packets, and the log shows "MIDI source: <name>", "MIDI: learned knob
   = CC n", "MIDI rotate delta=n" and the button lines, with the volume
   actually moving. Hot-plug works: a source created after the app
-  starts is picked up through the setup-changed notification.
+  starts is picked up through the setup-changed notification. Worth
+  covering all three encoder modes and a noisy controller (several CCs
+  on several channels at once); the noise case is what surfaced both
+  the learn threshold and the delta clamp. Expect the first two
+  messages of any run to be swallowed by learning, so a run of eight
+  ticks logs six deltas.
 - Settings-window smoke test: `defaults write io.perimtr.powermate
   debugOpenSettings -bool true`, relaunch, and the window opens two
   seconds later ("debug: settings window opened" at info). One-shot.

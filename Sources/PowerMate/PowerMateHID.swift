@@ -14,30 +14,41 @@ final class PowerMateHID {
     /// kIOReturnNotPermitted - the C macro doesn't import into Swift.
     private static let notPermitted = IOReturn(bitPattern: 0xE00002E2)
 
-    /// Hold this long without rotating and the long-press action fires.
-    private static let longPressDelay: TimeInterval = 0.5
-    /// Second click within this window makes a double-click.
-    private static let doubleClickWindow: TimeInterval = 0.35
-    /// Rotation counts per press-and-turn step (~1/5 turn between steps).
-    private static let pressedTurnChunk = 5
-
     var onConnect: ((IOHIDDevice) -> Void)?
     var onDisconnect: (() -> Void)?
     /// Rotation delta; positive = clockwise. Magnitude grows when spun fast.
-    var onRotate: ((Int) -> Void)?
+    var onRotate: ((Int) -> Void)? {
+        get { gestures.onRotate } set { gestures.onRotate = newValue }
+    }
     /// Button released quickly with no rotation (fires after the double-click
     /// window when double-click is enabled).
-    var onClick: (() -> Void)?
-    var onDoubleClick: (() -> Void)?
-    /// Button held ≥ longPressDelay without rotation; fires at the threshold.
-    var onLongPress: (() -> Void)?
+    var onClick: (() -> Void)? {
+        get { gestures.onClick } set { gestures.onClick = newValue }
+    }
+    var onDoubleClick: (() -> Void)? {
+        get { gestures.onDoubleClick } set { gestures.onDoubleClick = newValue }
+    }
+    /// Button held without rotation; fires at the long-press threshold.
+    var onLongPress: (() -> Void)? {
+        get { gestures.onLongPress } set { gestures.onLongPress = newValue }
+    }
     /// One step of rotate-while-pressed; argument is +1 (clockwise) or -1.
-    var onPressedRotate: ((Int) -> Void)?
+    var onPressedRotate: ((Int) -> Void)? {
+        get { gestures.onPressedRotate } set { gestures.onPressedRotate = newValue }
+    }
     var onPermissionDenied: (() -> Void)?
 
     /// When false, clicks fire immediately instead of waiting out the
     /// double-click window. Set by the app when no double-click action is bound.
-    var doubleClickEnabled = true
+    var doubleClickEnabled: Bool {
+        get { gestures.doubleClickEnabled } set { gestures.doubleClickEnabled = newValue }
+    }
+
+    /// The gesture timing lives in KnobGestures so the knob and any other
+    /// input source produce identical clicks, double-clicks, long presses
+    /// and press-and-turn steps. This file is now only the HID half:
+    /// matching, seizing, and parsing reports.
+    private let gestures = KnobGestures()
 
     private(set) var device: IOHIDDevice?
     /// True when the device was opened with exclusive access (seized), which
@@ -52,12 +63,6 @@ final class PowerMateHID {
     private var displaySleeping = false
     private var manager: IOHIDManager?
     private let reportBuffer = UnsafeMutablePointer<UInt8>.allocate(capacity: 64)
-    private var buttonIsDown = false
-    private var rotatedWhileDown = false
-    private var longPressFired = false
-    private var longPressTimer: Timer?
-    private var pendingClickTimer: Timer?
-    private var pressedRotationAccum = 0
 
     func start() {
         let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
@@ -117,8 +122,7 @@ final class PowerMateHID {
         }
 
         self.device = device
-        buttonIsDown = false
-        rotatedWhileDown = false
+        gestures.reset()
 
         let context = Unmanaged.passUnretained(self).toOpaque()
         IOHIDDeviceRegisterInputReportCallback(device, reportBuffer, 64, { context, _, _, _, _, report, length in
@@ -152,6 +156,9 @@ final class PowerMateHID {
         releasedDevice = device
         self.device = nil
         seized = false
+        // Drop any half-finished gesture rather than letting a timer fire
+        // against a device that is no longer open.
+        gestures.reset()
         logger.info("Device released so it can suspend (display asleep)")
         onDisconnect?()
     }
@@ -174,72 +181,10 @@ final class PowerMateHID {
         let echo = (2..<length).map { String(format: "%02x", report[$0]) }.joined()
         logger.info("report btn=\(report[0], privacy: .public) delta=\(delta, privacy: .public) echo=\(echo, privacy: .public)")
 
-        if delta != 0 {
-            if buttonIsDown {
-                if !rotatedWhileDown {
-                    rotatedWhileDown = true
-                    longPressTimer?.invalidate()
-                }
-                handlePressedRotation(delta)
-            } else {
-                onRotate?(delta)
-            }
-        }
-
-        if pressed != buttonIsDown {
-            buttonIsDown = pressed
-            if pressed {
-                buttonWentDown()
-            } else {
-                buttonWentUp()
-            }
-        }
-    }
-
-    private func buttonWentDown() {
-        rotatedWhileDown = false
-        longPressFired = false
-        pressedRotationAccum = 0
-        longPressTimer?.invalidate()
-        longPressTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.longPressDelay, repeats: false
-        ) { [weak self] _ in
-            guard let self, self.buttonIsDown, !self.rotatedWhileDown else { return }
-            self.longPressFired = true
-            self.onLongPress?()
-        }
-    }
-
-    private func buttonWentUp() {
-        longPressTimer?.invalidate()
-        guard !rotatedWhileDown, !longPressFired else { return }
-
-        if pendingClickTimer != nil {
-            pendingClickTimer?.invalidate()
-            pendingClickTimer = nil
-            onDoubleClick?()
-        } else if doubleClickEnabled {
-            pendingClickTimer = Timer.scheduledTimer(
-                withTimeInterval: Self.doubleClickWindow, repeats: false
-            ) { [weak self] _ in
-                self?.pendingClickTimer = nil
-                self?.onClick?()
-            }
-        } else {
-            onClick?()
-        }
-    }
-
-    private func handlePressedRotation(_ delta: Int) {
-        pressedRotationAccum += delta
-        while pressedRotationAccum >= Self.pressedTurnChunk {
-            pressedRotationAccum -= Self.pressedTurnChunk
-            onPressedRotate?(1)
-        }
-        while pressedRotationAccum <= -Self.pressedTurnChunk {
-            pressedRotationAccum += Self.pressedTurnChunk
-            onPressedRotate?(-1)
-        }
+        // Rotation before the button, so a turn that begins in the same
+        // report as a press is still read as press-and-turn.
+        gestures.rotated(delta)
+        gestures.buttonChanged(pressed: pressed)
     }
 
     deinit {
