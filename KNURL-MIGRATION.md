@@ -5,6 +5,11 @@ driver for one device into a control surface for macOS. Written
 2026-08-29, before any of it is done. Nothing here is urgent: the
 shipped 1.5 is healthy and this can wait as long as it needs to.
 
+**Status, 2026-09-01.** Phase 1 is done on the midi-source branch and
+waits on one hand test of the knob before it merges. Phase 2 onwards is
+held until counsel clears the name (see KNURL-NAMING.md). Nothing has
+been renamed anywhere, and nothing public has changed.
+
 The governing distinction, which decides most of the questions below:
 
 - **PowerMate as a product name** goes away. That is the app title, the
@@ -45,6 +50,13 @@ device, so the capability should exist before the identity changes.
    the old name; the next release should be the renamed 2.0.
 
 ## Phase 2: rename the repository
+
+**HELD as of 2026-09-01, by the owner's decision: do not rename the
+repository until counsel clears the name.** Renaming the public repo is
+the first step that publicly commits to Knurl, and KNURL-NAMING.md
+recommends a real trademark search before that happens. Renaming back
+afterwards works but chains redirects awkwardly. Everything below stays
+accurate; it just waits.
 
 Rename in place rather than creating a new repository:
 
