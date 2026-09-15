@@ -308,7 +308,7 @@ private final class AppTapEngine {
         self.currentGain = initialGain
 
         guard let outputDevice = SystemAudio.defaultOutputDevice(),
-              let outputUID = Self.deviceUID(outputDevice)
+              let outputUID = SystemAudio.uid(of: outputDevice)
         else { return nil }
 
         let description = CATapDescription(stereoMixdownOfProcesses: processObjects)
@@ -326,7 +326,7 @@ private final class AppTapEngine {
 
         let aggregateDescription: [String: Any] = [
             kAudioAggregateDeviceNameKey: "PowerMate App Volume",
-            kAudioAggregateDeviceUIDKey: "io.perimtr.powermate.appvolume." + UUID().uuidString,
+            kAudioAggregateDeviceUIDKey: SystemAudio.appVolumeAggregateUIDPrefix + UUID().uuidString,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceSubDeviceListKey: [
@@ -464,17 +464,5 @@ private final class AppTapEngine {
         outSquares += localOutSquares
         sampleCount += localSamples
         os_unfair_lock_unlock(&lock)
-    }
-
-    private static func deviceUID(_ device: AudioDeviceID) -> String? {
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyDeviceUID,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain)
-        var value: Unmanaged<CFString>?
-        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr,
-              let value else { return nil }
-        return value.takeRetainedValue() as String
     }
 }

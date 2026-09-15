@@ -53,7 +53,10 @@ All sources in Sources/PowerMate/:
   control requests. PulseSpeed and PulseWaveform presets live here.
 - SystemAudio.swift: CoreAudio default-output volume and mute, with
   per-channel fallback and software mute when hardware mute is absent;
-  output-device enumeration and default-output switching; and
+  output-device enumeration and default-output switching (the list
+  skips the app-volume aggregates by UID prefix: a private aggregate
+  device is hidden from other processes but visible to the process that
+  created it, so Cycle Audio Output would otherwise offer them); and
   SystemAudioObserver, which follows volume/mute/device changes made
   outside the app so the LED never goes stale.
 - AppVolume.swift: the Frontmost App Volume rotate mode (macOS 14.4+).

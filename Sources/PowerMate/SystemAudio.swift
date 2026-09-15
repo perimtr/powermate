@@ -102,8 +102,16 @@ enum SystemAudio {
 
     // MARK: - Output devices
 
+    /// UID prefix of the private aggregate devices the Frontmost App Volume
+    /// engines create (AppVolume.swift). A private aggregate is hidden from
+    /// other processes but fully visible to this one, so the output list has
+    /// to leave them out: cycling onto one would route the system through
+    /// the app's own gain stage.
+    static let appVolumeAggregateUIDPrefix = "io.perimtr.powermate.appvolume."
+
     /// Every device that can play audio, sorted by name so cycling through
-    /// them is deterministic.
+    /// them is deterministic. The app's own app-volume aggregates are
+    /// excluded.
     static func outputDevices() -> [(id: AudioDeviceID, name: String)] {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioHardwarePropertyDevices,
@@ -119,7 +127,7 @@ enum SystemAudio {
         guard AudioObjectGetPropertyData(
             AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr
         else { return [] }
-        return ids.filter(hasOutputStreams)
+        return ids.filter { hasOutputStreams($0) && !isAppVolumeAggregate($0) }
             .compactMap { id in name(of: id).map { (id: id, name: $0) } }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -134,17 +142,31 @@ enum SystemAudio {
             && size > 0
     }
 
+    private static func isAppVolumeAggregate(_ device: AudioDeviceID) -> Bool {
+        uid(of: device)?.hasPrefix(appVolumeAggregateUIDPrefix) ?? false
+    }
+
     static func name(of device: AudioDeviceID) -> String? {
+        stringProperty(kAudioObjectPropertyName, of: device)
+    }
+
+    static func uid(of device: AudioDeviceID) -> String? {
+        stringProperty(kAudioDevicePropertyDeviceUID, of: device)
+    }
+
+    private static func stringProperty(
+        _ selector: AudioObjectPropertySelector, of device: AudioDeviceID
+    ) -> String? {
         var address = AudioObjectPropertyAddress(
-            mSelector: kAudioObjectPropertyName,
+            mSelector: selector,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain)
         guard AudioObjectHasProperty(device, &address) else { return nil }
-        var nameRef: Unmanaged<CFString>?
+        var value: Unmanaged<CFString>?
         var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &nameRef) == noErr,
-              let nameRef else { return nil }
-        return nameRef.takeRetainedValue() as String
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr,
+              let value else { return nil }
+        return value.takeRetainedValue() as String
     }
 
     @discardableResult
