@@ -94,7 +94,9 @@ All sources in Sources/PowerMate/:
 Support/: Info.plist (bundle metadata), AppIcon.icns, make_appicon.swift
 (regenerates the icon artwork), pmled.swift (standalone USB probe:
 sends raw LED control requests and can re-enumerate the device to clear
-the stuck activity wedge, pitfall 7). Makefile: build, app bundle
+the stuck activity wedge, pitfall 7), fakewedge.swift (synthetic
+non-draining PowerMate assertion that makes the watchdog fire, for
+testing it without a real wedge). Makefile: build, app bundle
 assembly, ad-hoc codesign, install. docs/icon.png: README artwork.
 
 ## The device protocol
@@ -173,7 +175,8 @@ and verified against real hardware:
 7. The stuck activity wedge. The system can latch into reporting
    constant PowerMate user activity: pmset -g assertions shows a
    WindowServer UserIsActive assertion naming the Griffin PowerMate
-   whose 600 s timeout never counts down, and HIDIdleTime (ioreg -c
+   whose timeout (600 s on macOS 26, 1800 s on 27) never counts down,
+   and HIDIdleTime (ioreg -c
    IOHIDSystem) stays pinned near zero with nobody at the machine, so
    the display (and system) never idle-sleeps. Meanwhile the seized
    app receives zero input reports, and no LED command clears it;
@@ -202,7 +205,13 @@ and verified against real hardware:
    phantom by definition (seized means the system cannot be seeing
    real knob input), so the app re-enumerates the device (info log
    "Stuck activity wedge detected", rate-limited to once per 10 min)
-   and reconnects through normal hot-plug matching.
+   and reconnects through normal hot-plug matching. The assertion
+   dictionaries carry the name under "AssertName" and the countdown
+   under "AssertTimeoutTimeLeft"; releases 1.0 through 1.5 read
+   "Details" and "TimeoutTimeLeft", which nothing carries, so the
+   watchdog never matched and never fired (a live wedge on macOS 27
+   sat through two checks unnoticed on 2026-09-15). Fixed in 1.6 and
+   verified end to end with Support/fakewedge.swift.
 
 ## Data formats
 
@@ -316,6 +325,12 @@ downstream surfaces that display small (the website lists products at
   io.perimtr.powermate debugReenumerateOnConnect -bool true`, relaunch
   the app, and the log shows connect, "debug: re-enumerating on
   connect", a disconnect, and a clean re-seize. The flag is one-shot.
+- Watchdog test without a live wedge: `swiftc -O Support/fakewedge.swift
+  -o /tmp/fakewedge && /tmp/fakewedge` while the app has the knob
+  seized. Within 2 min 15 s the log shows "Stuck activity wedge
+  detected", "PowerMate disconnected", and a re-seize. The synthetic
+  assertion is the tool's, not the HID stack's, so it outlives the
+  heal and no second heal follows for 10 min.
 - Settings-window smoke test: `defaults write io.perimtr.powermate
   debugOpenSettings -bool true`, relaunch, and the window opens two
   seconds later ("debug: settings window opened" at info). One-shot.

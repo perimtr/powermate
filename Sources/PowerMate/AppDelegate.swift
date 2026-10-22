@@ -1185,17 +1185,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Remaining timeout of a UserIsActive assertion naming the PowerMate,
     /// or nil when there is none. A healthy assertion drains toward zero
     /// and expires; phantom input re-arms it back to its full timeout.
+    ///
+    /// The keys are the ones IOPMCopyAssertionsByProcess actually returns:
+    /// kIOPMAssertionNameKey is "AssertName" and the countdown is
+    /// "AssertTimeoutTimeLeft". Releases 1.0 through 1.5 read "Details"
+    /// and "TimeoutTimeLeft", which no assertion carries, so the watchdog
+    /// never matched anything and never fired.
     private func powerMateAssertionTimeLeft() -> Int? {
         var assertionsRef: Unmanaged<CFDictionary>?
         guard IOPMCopyAssertionsByProcess(&assertionsRef) == kIOReturnSuccess,
               let byPid = assertionsRef?.takeRetainedValue() as? [AnyHashable: Any]
         else { return nil }
+        let ownPID = Int(ProcessInfo.processInfo.processIdentifier)
         for perProcess in byPid.values {
             guard let list = perProcess as? [[String: Any]] else { continue }
             for assertion in list {
-                let details = assertion["Details"] as? String ?? ""
-                guard details.contains("Griffin PowerMate") else { continue }
-                return assertion["TimeoutTimeLeft"] as? Int ?? -1
+                // Our own "PowerMate knob input" declaration must not count.
+                if (assertion["AssertPID"] as? NSNumber)?.intValue == ownPID { continue }
+                let name = assertion["AssertName"] as? String ?? ""
+                guard name.contains("Griffin PowerMate") else { continue }
+                return (assertion["AssertTimeoutTimeLeft"] as? NSNumber)?.intValue ?? -1
             }
         }
         return nil
