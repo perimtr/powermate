@@ -175,8 +175,9 @@ and verified against real hardware:
 7. The stuck activity wedge. The system can latch into reporting
    constant PowerMate user activity: pmset -g assertions shows a
    WindowServer UserIsActive assertion naming the Griffin PowerMate
-   whose timeout (600 s on macOS 26, 1800 s on 27) never counts down,
-   and HIDIdleTime (ioreg -c
+   whose timeout never counts down (the timeout mirrors the display
+   sleep timer: 600 s at 10 min, 1800 s at 30 min), and HIDIdleTime
+   (ioreg -c
    IOHIDSystem) stays pinned near zero with nobody at the machine, so
    the display (and system) never idle-sleeps. Meanwhile the seized
    app receives zero input reports, and no LED command clears it;
@@ -211,7 +212,10 @@ and verified against real hardware:
    "Details" and "TimeoutTimeLeft", which nothing carries, so the
    watchdog never matched and never fired (a live wedge on macOS 27
    sat through two checks unnoticed on 2026-09-15). Fixed in 1.6 and
-   verified end to end with Support/fakewedge.swift.
+   verified end to end with Support/fakewedge.swift, then against a
+   real wedge on 2026-10-22: it appeared seconds after launch, the
+   first check caught it, the device re-seized 5 s after the
+   re-enumeration, and the assertion did not return.
 
 ## Data formats
 
