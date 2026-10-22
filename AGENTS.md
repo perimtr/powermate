@@ -14,10 +14,9 @@ remappable globally and per app, and the knob's blue LED is fully driven
 (brightness, breathing pulse with three selectable waveforms, off during
 sleep).
 
-- Repo: https://github.com/perimtr/powermate (private until the owner
-  decides to open-source it; MIT licensed either way)
+- Repo: https://github.com/perimtr/powermate (public, MIT licensed)
 - Installed app: /Applications/PowerMate.app, bundle id io.perimtr.powermate
-- Local checkout: ~/Projects/powermate
+- Local checkout: ~/Zen/powermate
 - CI: .github/workflows/ci.yml builds on every push (macOS runner)
 
 ## Repository conventions (must follow)
@@ -356,7 +355,7 @@ downstream surfaces that display small (the website lists products at
 ## Related surfaces
 
 - Homebrew tap: github.com/perimtr/homebrew-tap (local checkout
-  ~/Projects/homebrew-tap), installing via
+  ~/Zen/homebrew-tap), installing via
   `brew install --cask perimtr/tap/powermate`. Casks/powermate.rb pins
   the version and the sha256 of PowerMate-<version>.dmg; a scheduled
   workflow in that repo follows new releases and commits the update
@@ -366,21 +365,20 @@ downstream surfaces that display small (the website lists products at
   forks/watchers), so submit there only once adoption justifies it.
 
 - Canonical family identity:
-  ~/Projects/perimtr-website/design/PERIMTR-FAMILY-DESIGN-SYSTEM.md.
+  ~/Zen/perimtr-website/design/PERIMTR-FAMILY-DESIGN-SYSTEM.md.
   Use it for shared brand, color, typography, naming presentation, and
   Perimtr attribution decisions. PowerMate remains a hardware-led endorsed
   product and keeps its title-case name, native macOS UI, and fixed blue LED.
 - PRIVACY.md in this repo states the app collects nothing and documents
   its single network call (the update check, UpdateChecker.swift); keep
   both statements true, and mirror changes to the perimtr.io page.
-- The company site (~/Projects/perimtr-website, deploys to perimtr.io on
+- The company site (~/Zen/perimtr-website, deploys to perimtr.io on
   push via S3/CloudFront) has a PowerMate product card linking the
-  GitHub repo (404 for the public while the repo is private) and a
-  per-app privacy page at perimtr.io/powermate/privacy mirroring
-  PRIVACY.md. Update both if data practices ever change.
-- When the repo goes public again: re-enable secret scanning, push
-  protection, and private vulnerability reporting in repo settings, and
-  give the site's PowerMate card a working GitHub link.
+  GitHub repo and the latest disk image, and a per-app privacy page at
+  perimtr.io/powermate/privacy mirroring PRIVACY.md. Update both if
+  data practices ever change.
+- The repo is public. Secret scanning, push protection, and private
+  vulnerability reporting are enabled in its settings; keep them on.
 
 ## Scope
 
