@@ -129,6 +129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // the device is the only known cure. See AGENTS.md, item 7.
     private var wedgeTimer: Timer?
     private var lastWedgeHeal = Date.distantPast
+    /// True when the last heal was the gentle release-and-re-seize. A wedge
+    /// seen again inside the rate-limit window then escalates to a USB
+    /// re-enumeration instead of waiting the window out.
+    private var lastWedgeHealWasGentle = false
 
     private static let sensitivities: [(title: String, step: Double)] = [
         ("Fine (0.5%)", 0.005),
@@ -1210,9 +1214,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return nil
     }
 
+    /// Two-stage heal. First the gentle cure: close the HID device and
+    /// re-seize it, no USB bus reset. That cleared a live wedge on macOS 27
+    /// and seeded no new one, whereas re-enumeration re-publishes the USB
+    /// device, which other USB monitors race the HID driver for and which
+    /// twice left the knob's input dead until a power cycle. If the wedge
+    /// is still re-arming at the next check, escalate to re-enumeration.
     private func checkForWedge() {
-        guard deviceConnected, hid.seized, led != nil,
-              Date().timeIntervalSince(lastWedgeHeal) > 600,
+        guard deviceConnected, hid.seized, led != nil else { return }
+        let sinceHeal = Date().timeIntervalSince(lastWedgeHeal)
+        let escalate = lastWedgeHealWasGentle && sinceHeal < 600
+        guard escalate || sinceHeal > 600,
               let first = powerMateAssertionTimeLeft() else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
             guard let self, self.deviceConnected, self.hid.seized,
@@ -1220,8 +1232,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // Draining is healthy; anything else means it was re-armed.
             guard second >= first else { return }
             self.lastWedgeHeal = Date()
-            logger.info("Stuck activity wedge detected (assertion re-arming while seized); re-enumerating the device")
-            self.led?.reenumerate()
+            if escalate {
+                self.lastWedgeHealWasGentle = false
+                logger.notice("Stuck activity wedge persists after re-seize; re-enumerating the device")
+                self.led?.reenumerate()
+            } else {
+                self.lastWedgeHealWasGentle = true
+                logger.notice("Stuck activity wedge detected (assertion re-arming while seized); releasing and re-seizing the device")
+                self.hid.reseize()
+            }
         }
     }
 

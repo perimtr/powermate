@@ -163,6 +163,26 @@ final class PowerMateHID {
         deviceMatched(released)
     }
 
+    /// Close the device and reopen it with seize, without a USB bus reset:
+    /// the gentle cure for the stuck activity wedge (AGENTS.md, item 7).
+    /// Closing a seized device makes the HID system re-publish it, so the
+    /// matching callback normally reopens the fresh object within a second;
+    /// if nothing is re-published, the old object is reopened instead.
+    func reseize() {
+        guard !displaySleeping, let device else { return }
+        IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
+        releasedDevice = device
+        self.device = nil
+        seized = false
+        logger.notice("Device released for re-seize")
+        onDisconnect?()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, self.device == nil, let released = self.releasedDevice else { return }
+            self.releasedDevice = nil
+            self.deviceMatched(released)
+        }
+    }
+
     private func handleReport(_ report: UnsafeMutablePointer<UInt8>, length: CFIndex) {
         guard length >= 2 else { return }
         let pressed = report[0] & 0x01 != 0

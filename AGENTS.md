@@ -47,7 +47,8 @@ All sources in Sources/PowerMate/:
 - PowerMateHID.swift: IOHIDManager device matching, exclusive (seize)
   open, raw input report parsing, and the gesture engine (click,
   double-click window, long press timer, chunked press-and-turn).
-  Also release/reacquire for display sleep.
+  Also release/reacquire for display sleep, reused by the watchdog's
+  gentle re-seize.
 - PowerMateLED.swift: LED control through IOUSBDeviceInterface vendor
   control requests. PulseSpeed and PulseWaveform presets live here.
 - SystemAudio.swift: CoreAudio default-output volume and mute, with
@@ -203,9 +204,27 @@ and verified against real hardware:
    IOPMCopyAssertionsByProcess, and a PowerMate-named UserIsActive
    assertion whose timeout fails to drain across a 15 s re-sample is
    phantom by definition (seized means the system cannot be seeing
-   real knob input), so the app re-enumerates the device (info log
-   "Stuck activity wedge detected", rate-limited to once per 10 min)
-   and reconnects through normal hot-plug matching. The assertion
+   real knob input). Since 1.7 the heal has two stages. First the app
+   closes the HID device and re-seizes it, with no USB bus reset
+   (notice log "Stuck activity wedge detected", then "Device released
+   for re-seize" and a fresh "Device seized" about a second later). If
+   the next check still sees the assertion re-arming, it escalates to
+   a USB re-enumeration ("Stuck activity wedge persists after
+   re-seize") and reconnects through normal hot-plug matching. Heals
+   are rate-limited to one per 10 min except for that one escalation.
+   Why the gentle stage comes first (2026-10-22 and 23, macOS 27): the
+   wedge formed within a minute or two of every device publication,
+   whether an app launch, a physical replug, or the watchdog's own
+   re-enumeration. Twice that re-enumeration left the knob's input
+   endpoint dead until a physical power cycle: LED commands were still
+   accepted and the I/O Registry looked healthy, but no input report
+   reached the app or the system. Both times, third-party USB
+   monitors (UTM and ChatGPT open every USB device the instant it
+   enumerates) had attached to the fresh device before the HID driver;
+   the one re-enumeration where the driver attached first left the
+   knob working. A display-sleep cycle, which is the same HID close
+   and re-seize, cleared a live wedge in one second and no new wedge
+   formed in the following quarter hour. The assertion
    dictionaries carry the name under "AssertName" and the countdown
    under "AssertTimeoutTimeLeft"; releases 1.0 through 1.5 read
    "Details" and "TimeoutTimeLeft", which nothing carries, so the
@@ -331,9 +350,14 @@ downstream surfaces that display small (the website lists products at
 - Watchdog test without a live wedge: `swiftc -O Support/fakewedge.swift
   -o /tmp/fakewedge && /tmp/fakewedge` while the app has the knob
   seized. Within 2 min 15 s the log shows "Stuck activity wedge
-  detected", "PowerMate disconnected", and a re-seize. The synthetic
-  assertion is the tool's, not the HID stack's, so it outlives the
-  heal and no second heal follows for 10 min.
+  detected", "Device released for re-seize", and a fresh "Device
+  seized" (stage one). The synthetic assertion is the tool's, not the
+  HID stack's, so it survives that cure, and about 2 min later the
+  next check escalates: "Stuck activity wedge persists after
+  re-seize", "PowerMate disconnected", and a re-seize. To exercise only
+  the gentle stage, stop the tool before that second check. The
+  watchdog's lines are logged at notice level, so unlike the rest of
+  the app's output they also appear in `log show`.
 - Settings-window smoke test: `defaults write io.perimtr.powermate
   debugOpenSettings -bool true`, relaunch, and the window opens two
   seconds later ("debug: settings window opened" at info). One-shot.
